@@ -394,6 +394,7 @@ instance Text ModuleRenaming where
 -- The Library type
 
 data Library = Library {
+        backpackFile      :: Maybe FilePath,
         exposedModules    :: [ModuleName],
         reexportedModules :: [ModuleReexport],
         requiredSignatures:: [ModuleName], -- ^ What sigs need implementations?
@@ -407,6 +408,7 @@ instance Binary Library
 
 instance Monoid Library where
   mempty = Library {
+    backpackFile = Nothing,
     exposedModules = mempty,
     reexportedModules = mempty,
     requiredSignatures = mempty,
@@ -415,6 +417,7 @@ instance Monoid Library where
     libBuildInfo   = mempty
   }
   mappend a b = Library {
+    backpackFile = combine backpackFile,
     exposedModules = combine exposedModules,
     reexportedModules = combine reexportedModules,
     requiredSignatures = combine requiredSignatures,

@@ -28,6 +28,7 @@
 
 module Distribution.InstalledPackageInfo (
         InstalledPackageInfo(..),
+        IndefiniteUnitInfo(..),
         libraryName,
         OriginalModule(..), ExposedModule(..),
         ParseResult(..), PError(..), PWarning,
@@ -46,13 +47,14 @@ import Distribution.ParseUtils
          , parseFieldsFlat
          , parseFilePathQ, parseTokenQ, parseModuleNameQ, parsePackageNameQ
          , showFilePath, showToken, boolField, parseOptVersion
-         , parseFreeText, showFreeText, parseOptCommaList )
+         , parseFreeText, showFreeText, parseOptCommaList
+         , parseSepList, commaListField )
 import Distribution.License     ( License(..) )
 import Distribution.Package
          ( PackageName(..), PackageIdentifier(..)
          , PackageId, InstalledPackageId(..)
          , packageName, packageVersion, PackageKey(..)
-         , LibraryName(..) )
+         , LibraryName(..), emptyLibraryName )
 import qualified Distribution.Package as Package
 import Distribution.ModuleName
          ( ModuleName )
@@ -62,7 +64,10 @@ import Distribution.Text
          ( Text(disp, parse) )
 import Text.PrettyPrint as Disp
 import qualified Distribution.Compat.ReadP as Parse
+import Distribution.Compat.ReadP ((<++))
 
+import Data.List
+import qualified Data.Char as Char
 import Distribution.Compat.Binary  (Binary)
 import Data.Maybe   (fromMaybe)
 import GHC.Generics (Generic)
@@ -394,3 +399,130 @@ deprecatedFieldDescrs = [
         showToken          parseTokenQ
         (const [])        (const id)
   ]
+
+-- -----------------------------------------------------------------------------
+-- Indefinite stuff
+
+data IndefiniteUnitInfo
+  = IndefiniteUnitInfo {
+        indefUnitId     :: IndefiniteUnitId,
+        indefProvides   :: [(ModuleName, IndefiniteModule)],
+        indefRequires   :: [ModuleName],
+        indefImportDirs :: [FilePath]
+    } deriving (Generic, Read, Show)
+
+emptyIndefiniteUnitInfo :: IndefiniteUnitInfo
+emptyIndefiniteUnitInfo
+  = IndefiniteUnitInfo {
+        indefUnitId = IndefiniteUnitId emptyLibraryName Nothing,
+        indefProvides = [],
+        indefRequires = [],
+        indefImportDirs = []
+    }
+
+fieldsIndefiniteUnitInfo :: [FieldDescr IndefiniteUnitInfo]
+fieldsIndefiniteUnitInfo =
+  [ simpleField "id"
+        disp               parse -- BLAH
+        (indefUnitLibraryName . indefUnitId)
+        (\ln unit -> unit{indefUnitId=(indefUnitId unit) { indefUnitLibraryName = ln }})
+  , simpleField "unit-name"
+        disp               parse
+        (fromMaybe (UnitName "") . indefUnitName . indefUnitId) -- uses the empty = omit convention
+        (\un unit -> unit{indefUnitId=(indefUnitId unit) { indefUnitName = Just un } })
+  , listField "requires"
+        disp               parseModuleNameQ
+        indefRequires      (\reqs unit -> unit{indefRequires = reqs})
+  , listField "import-dirs"
+        showFilePath       parseFilePathQ
+        indefImportDirs    (\xs unit -> unit{indefImportDirs=xs})
+  , commaListField "exposed-modules"
+        showProvision      parseProvision
+        indefProvides      (\xs unit -> unit{indefProvides=xs})
+  ]
+
+showProvision :: (ModuleName, IndefiniteModule) -> Disp.Doc
+showProvision (modname, mod) = disp modname <+> Disp.text "as" <+> disp mod
+
+parseProvision :: Parse.ReadP r (ModuleName, IndefiniteModule)
+parseProvision = do
+    modname <- parse
+    Parse.skipSpaces
+    _ <- Parse.string "as"
+    Parse.skipSpaces
+    mod <- parse
+    return (modname, mod)
+
+newtype UnitName = UnitName String
+    deriving (Generic, Read, Show)
+
+instance Text UnitName where
+    disp (UnitName un) = Disp.text un
+    -- For now, the same as PackageName
+    parse = do
+        ns <- Parse.sepBy1 component (Parse.char '-')
+        return (UnitName (intercalate "-" ns))
+        where
+          component = do
+            cs <- Parse.munch1 Char.isAlphaNum
+            if all Char.isDigit cs then Parse.pfail else return cs
+
+-- TODO: Maybe move these to Distribution.Package
+data IndefiniteUnitId
+  = IndefiniteUnitId {
+        indefUnitLibraryName :: LibraryName,
+        indefUnitName        :: Maybe UnitName
+    } deriving (Generic, Read, Show)
+
+instance Text IndefiniteUnitId where
+    disp (IndefiniteUnitId ln (Just un)) =
+        disp ln <> Disp.char '/' <> disp un
+    disp (IndefiniteUnitId ln Nothing) = disp ln
+    parse = do
+        ln <- parse
+        mb_un <- (Parse.char '/' >> fmap Just parse)
+             <++ return Nothing
+        return (IndefiniteUnitId ln mb_un)
+
+data IndefiniteModule
+  = IndefiniteModule {
+        indefModuleUnitKey  :: IndefiniteUnitKey,
+        indefModuleName     :: ModuleName
+    } deriving (Generic, Read, Show)
+
+instance Text IndefiniteModule where
+    disp (IndefiniteModule uk m) =
+        disp uk <> Disp.char ':' <> disp m
+    parse = do
+        uk <- parse
+        _ <- Parse.char ':'
+        m <- parse
+        return (IndefiniteModule uk m)
+
+data IndefiniteUnitKey
+  = IndefiniteUnitKey {
+        unitKeyId :: IndefiniteUnitId,
+        unitKeyInsts :: [(ModuleName, IndefiniteModule)]
+    } deriving (Generic, Read, Show)
+
+instance Text IndefiniteUnitKey where
+    disp (IndefiniteUnitKey (IndefiniteUnitId ln Nothing) []) =
+        disp ln
+    disp (IndefiniteUnitKey uid insts) =
+        disp uid <> Disp.parens (fsep (Disp.punctuate comma (map dispHmap insts)))
+      where dispHmap (modname, mod) = disp modname <+> Disp.text "->" <+> disp mod
+    parse = do
+        ln <- parse
+        parseBkp ln <++ return (IndefiniteUnitKey (IndefiniteUnitId ln Nothing) [])
+      where parseBkp ln =
+             do _ <- Parse.char '/'
+                un <- parse
+                insts <- Parse.between (Parse.char '(') (Parse.char ')')
+                       . parseSepList (Parse.char ',')
+                       $ do modname <- parse
+                            Parse.skipSpaces
+                            Parse.string "->"
+                            Parse.skipSpaces
+                            mod <- parse
+                            return (modname, mod)
+                return (IndefiniteUnitKey (IndefiniteUnitId ln (Just un)) insts)

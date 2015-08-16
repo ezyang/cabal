@@ -43,7 +43,7 @@ module Distribution.PackageDescription.Parse (
 
 import Data.Char     (isSpace)
 import Data.Foldable (traverse_)
-import Data.Maybe    (listToMaybe, isJust)
+import Data.Maybe    (listToMaybe, isJust, fromMaybe)
 import Data.List     (nub, unfoldr, partition, (\\))
 import Control.Monad (liftM, foldM, when, unless, ap)
 #if __GLASGOW_HASKELL__ < 710
@@ -195,6 +195,9 @@ libFieldDescrs =
 
   , listFieldWithSep vcat "exposed-signatures" disp parseModuleNameQ
       exposedSignatures (\mods lib -> lib{exposedSignatures=mods})
+
+  , simpleField "backpack-file" showFilePath parseFilePathQ
+      (fromMaybe "" . backpackFile) (\path lib -> lib{backpackFile=Just path})
 
   , boolField "exposed"
       libExposed     (\val lib -> lib{libExposed=val})

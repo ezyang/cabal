@@ -243,6 +243,11 @@ checkLibrary pkg lib =
       PackageDistInexcusable $
            "To use the 'exposed-signatures' field the package needs to specify "
         ++ "at least 'cabal-version: >= 1.21'."
+
+  , checkVersion [1,23] (isJust (backpackFile lib)) $
+      PackageDistInexcusable $
+           "To use the 'backpack-file' field the package needs to specify "
+        ++ "at least 'cabal-version: >= 1.23'."
   ]
 
   where
