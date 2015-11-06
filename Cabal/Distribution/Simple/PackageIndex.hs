@@ -601,11 +601,11 @@ moduleNameIndex :: InstalledPackageIndex -> Map ModuleName [InstalledPackageInfo
 moduleNameIndex index =
   Map.fromListWith (++) $ do
     pkg <- allPackages index
-    IPI.ExposedModule m reexport _ <- IPI.exposedModules pkg
+    IPI.ExposedModule m reexport <- IPI.exposedModules pkg
     case reexport of
         Nothing -> return (m, [pkg])
-        Just (IPI.OriginalModule _ m') | m == m'   -> []
-                                       | otherwise -> return (m', [pkg])
+        Just (IPI.Module _ m') | m == m'   -> []
+                               | otherwise -> return (m', [pkg])
         -- The heuristic is this: we want to prefer the original package
         -- which originally exported a module.  However, if a reexport
         -- also *renamed* the module (m /= m'), then we have to use the

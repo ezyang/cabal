@@ -29,8 +29,10 @@
 module Distribution.InstalledPackageInfo (
         AbiHash(..),
         InstalledPackageInfo(..),
-        OriginalModule(..), ExposedModule(..),
+        UnitId(..),
+        Module(..), ExposedModule(..),
         ParseResult(..), PError(..), PWarning,
+        installedUnitId,
         emptyInstalledPackageInfo,
         parseInstalledPackageInfo,
         showInstalledPackageInfo,
@@ -92,7 +94,9 @@ data InstalledPackageInfo
         abiHash           :: AbiHash,
         exposed           :: Bool,
         exposedModules    :: [ExposedModule],
-        instantiatedWith  :: [(ModuleName, OriginalModule)],
+        instantiatedWith  :: [(ModuleName, Module)],
+        instantiatedDepends :: [UnitId],
+        indefinite        :: Bool,
         hiddenModules     :: [ModuleName],
         trusted           :: Bool,
         importDirs        :: [FilePath],
@@ -103,7 +107,7 @@ data InstalledPackageInfo
         extraGHCiLibraries:: [String],    -- overrides extraLibraries for GHCi
         includeDirs       :: [FilePath],
         includes          :: [String],
-        depends           :: [ComponentId],
+        depends           :: [UnitId],
         ccOptions         :: [String],
         ldOptions         :: [String],
         frameworkDirs     :: [FilePath],
@@ -114,6 +118,8 @@ data InstalledPackageInfo
     }
     deriving (Generic, Read, Show)
 
+installedUnitId pkg = UnitId (installedComponentId pkg) []
+
 instance Binary InstalledPackageInfo
 
 instance Package.Package InstalledPackageInfo where
@@ -123,7 +129,8 @@ instance Package.HasComponentId InstalledPackageInfo where
    installedComponentId = installedComponentId
 
 instance Package.PackageInstalled InstalledPackageInfo where
-   installedDepends = depends
+   -- TODO: refine dependency graph to work on UnitIds!
+   installedDepends = map unitIdComponentId . depends
 
 emptyInstalledPackageInfo :: InstalledPackageInfo
 emptyInstalledPackageInfo
@@ -146,6 +153,8 @@ emptyInstalledPackageInfo
         exposedModules    = [],
         hiddenModules     = [],
         instantiatedWith  = [],
+        instantiatedDepends = [],
+        indefinite        = False,
         trusted           = False,
         importDirs        = [],
         libraryDirs       = [],
@@ -182,38 +191,61 @@ instance Text AbiHash where
 -- -----------------------------------------------------------------------------
 -- Exposed modules
 
-data OriginalModule
-   = OriginalModule {
-       originalPackageId :: ComponentId,
-       originalModuleName :: ModuleName
+data Module
+   = Module {
+       moduleUnitId :: UnitId,
+       moduleName :: ModuleName
      }
-  deriving (Generic, Eq, Read, Show)
+  deriving (Generic, Eq, Read, Show, Ord)
+
+instance Text Module where
+    disp (Module uid m) =
+        disp uid <> Disp.char ':' <> disp m
+    parse = do
+        uid <- parse
+        _ <- Parse.char ':'
+        m <- parse
+        return (Module uid m)
+
+instance Binary Module
+
+data UnitId
+    = UnitId {
+        unitIdComponentId :: ComponentId,
+        unitIdInsts :: [(ModuleName, Module)]
+    }
+  deriving (Generic, Eq, Read, Show, Ord)
+
+instance Text UnitId where
+    disp (UnitId cid []) = disp cid
+    disp (UnitId cid insts) =
+        disp cid <> text "(" <> hcat (punctuate (text ",") (map dispInst insts)) <> text ")"
+        where dispInst (modname, uid) = disp modname <> text "=" <> disp uid
+
+    parse = do cid <- parse
+               (do _ <- Parse.char '('
+                   insts <- Parse.sepBy (do name <- parse
+                                            _ <- Parse.char '='
+                                            uid <- parse
+                                            return (name, uid)) (Parse.char ',')
+                   _ <- Parse.char ')'
+                   return (UnitId cid insts))
+                   Parse.<++ (return (UnitId cid []))
+
+instance Binary UnitId
 
 data ExposedModule
    = ExposedModule {
        exposedName      :: ModuleName,
-       exposedReexport  :: Maybe OriginalModule,
-       exposedSignature :: Maybe OriginalModule -- This field is unused for now.
+       exposedReexport  :: Maybe Module
      }
   deriving (Generic, Read, Show)
 
-instance Text OriginalModule where
-    disp (OriginalModule ipi m) =
-        disp ipi <> Disp.char ':' <> disp m
-    parse = do
-        ipi <- parse
-        _ <- Parse.char ':'
-        m <- parse
-        return (OriginalModule ipi m)
-
 instance Text ExposedModule where
-    disp (ExposedModule m reexport signature) =
+    disp (ExposedModule m reexport) =
         Disp.sep [ disp m
                  , case reexport of
                     Just m' -> Disp.sep [Disp.text "from", disp m']
-                    Nothing -> Disp.empty
-                 , case signature of
-                    Just m' -> Disp.sep [Disp.text "is", disp m']
                     Nothing -> Disp.empty
                  ]
     parse = do
@@ -223,15 +255,7 @@ instance Text ExposedModule where
             _ <- Parse.string "from"
             Parse.skipSpaces
             fmap Just parse
-        Parse.skipSpaces
-        signature <- Parse.option Nothing $ do
-            _ <- Parse.string "is"
-            Parse.skipSpaces
-            fmap Just parse
-        return (ExposedModule m reexport signature)
-
-
-instance Binary OriginalModule
+        return (ExposedModule m reexport)
 
 instance Binary ExposedModule
 
@@ -244,7 +268,7 @@ showExposedModules :: [ExposedModule] -> Disp.Doc
 showExposedModules xs
     | all isExposedModule xs = fsep (map disp xs)
     | otherwise = fsep (Disp.punctuate comma (map disp xs))
-    where isExposedModule (ExposedModule _ Nothing Nothing) = True
+    where isExposedModule (ExposedModule _ Nothing) = True
           isExposedModule _ = False
 
 parseExposedModules :: Parse.ReadP r [ExposedModule]
@@ -258,13 +282,13 @@ parseInstalledPackageInfo =
     parseFieldsFlat (fieldsInstalledPackageInfo ++ deprecatedFieldDescrs)
     emptyInstalledPackageInfo
 
-parseInstantiatedWith :: Parse.ReadP r (ModuleName, OriginalModule)
+parseInstantiatedWith :: Parse.ReadP r (ModuleName, Module)
 parseInstantiatedWith = do k <- parse
                            _ <- Parse.char '='
                            n <- parse
                            _ <- Parse.char '@'
                            p <- parse
-                           return (k, OriginalModule p n)
+                           return (k, Module p n)
 
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
@@ -278,8 +302,8 @@ showInstalledPackageInfoField = showSingleNamedField fieldsInstalledPackageInfo
 showSimpleInstalledPackageInfoField :: String -> Maybe (InstalledPackageInfo -> String)
 showSimpleInstalledPackageInfoField = showSimpleSingleNamedField fieldsInstalledPackageInfo
 
-showInstantiatedWith :: (ModuleName, OriginalModule) -> Doc
-showInstantiatedWith (k, OriginalModule p m) = disp k <> text "=" <> disp m <> text "@" <> disp p
+showInstantiatedWith :: (ModuleName, Module) -> Doc
+showInstantiatedWith (k, Module p m) = disp k <> text "=" <> disp m <> text "@" <> disp p
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
@@ -349,6 +373,11 @@ installedFieldDescrs = [
  , listField   "instantiated-with"
         showInstantiatedWith parseInstantiatedWith
         instantiatedWith   (\xs    pkg -> pkg{instantiatedWith=xs})
+ , listField   "instantiated-depends"
+        disp               parse
+        instantiatedDepends (\xs pkg -> pkg{instantiatedDepends=xs})
+ , boolField   "indefinite"
+        indefinite         (\val pkg -> pkg{indefinite=val})
  , boolField   "trusted"
         trusted            (\val pkg -> pkg{trusted=val})
  , listField   "import-dirs"

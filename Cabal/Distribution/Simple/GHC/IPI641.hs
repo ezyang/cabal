@@ -67,7 +67,8 @@ mkComponentId = Current.ComponentId . display
 toCurrent :: InstalledPackageInfo -> Current.InstalledPackageInfo
 toCurrent ipi@InstalledPackageInfo{} =
   let pid = convertPackageId (package ipi)
-      mkExposedModule m = Current.ExposedModule m Nothing Nothing
+      mkExposedModule m = Current.ExposedModule m Nothing
+      mkUnitId cid = Current.UnitId cid []
   in Current.InstalledPackageInfo {
     Current.sourcePackageId    = pid,
     Current.installedComponentId         = mkComponentId pid,
@@ -96,7 +97,7 @@ toCurrent ipi@InstalledPackageInfo{} =
     Current.extraGHCiLibraries = [],
     Current.includeDirs        = includeDirs ipi,
     Current.includes           = includes ipi,
-    Current.depends            = map (mkComponentId.convertPackageId) (depends ipi),
+    Current.depends            = map (mkUnitId.mkComponentId.convertPackageId) (depends ipi),
     Current.ccOptions          = ccOptions ipi,
     Current.ldOptions          = ldOptions ipi,
     Current.frameworkDirs      = frameworkDirs ipi,

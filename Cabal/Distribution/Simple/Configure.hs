@@ -564,7 +564,7 @@ configure (pkg_descr0, pbi) cfg
                    ComponentId (display (packageId pkg_descr)),
                 Installed.sourcePackageId = packageId pkg_descr,
                 Installed.depends =
-                  map Installed.installedComponentId installDeps
+                  map Installed.installedUnitId installDeps
               }
         case PackageIndex.dependencyInconsistencies
            . PackageIndex.insert pseudoTopPkg
@@ -1408,13 +1408,8 @@ mkComponentsLocalBuildInfo cfg comp installedPackages pkg_descr
     componentLocalBuildInfo lib_hash compat_key component =
       case component of
       CLib lib -> do
-        let exports = map (\n -> Installed.ExposedModule n Nothing Nothing)
+        let exports = map (\n -> Installed.ExposedModule n Nothing)
                           (PD.exposedModules lib)
-            esigs = map (\n -> Installed.ExposedModule n Nothing
-                                (fmap (\(pkg,m) -> Installed.OriginalModule
-                                                      (Installed.installedComponentId pkg) m)
-                                      (Map.lookup n hole_insts)))
-                        (PD.exposedSignatures lib)
         let mb_reexports = resolveModuleReexports installedPackages
                                                   (packageId pkg_descr)
                                                   lib_hash
@@ -1428,7 +1423,7 @@ mkComponentsLocalBuildInfo cfg comp installedPackages pkg_descr
           componentId = lib_hash,
           componentCompatPackageKey = compat_key,
           componentPackageRenaming = cprns,
-          componentExposedModules = exports ++ reexports ++ esigs
+          componentExposedModules = exports ++ reexports
         }
       CExe _ ->
         return ExeComponentLocalBuildInfo {
@@ -1519,12 +1514,11 @@ resolveModuleReexports installedPackages srcpkgid key externalPkgDeps lib =
                             ++ otherModules (libBuildInfo lib)
         , let exportingPackageName = packageName srcpkgid
               definingModuleName   = visibleModuleName
-              definingPackageId    = key
-              originalModule = Installed.OriginalModule definingPackageId
-                                                        definingModuleName
+              definingPackageId    = Installed.UnitId key [] -- TODO FIX ME
+              originalModule = Installed.Module definingPackageId
+                                                definingModuleName
               exposedModule  = Installed.ExposedModule visibleModuleName
                                                        (Just originalModule)
-                                                             Nothing
         ]
 
     -- All the modules exported from this package and their defining name and
@@ -1538,8 +1532,9 @@ resolveModuleReexports installedPackages srcpkgid key externalPkgDeps lib =
         -- The first case is the modules actually defined in this package.
         -- In this case the reexport will point to this package.
             Nothing -> return exposedModule { Installed.exposedReexport =
-                            Just (Installed.OriginalModule (Installed.installedComponentId pkg)
-                                                 (Installed.exposedName exposedModule)) }
+                            Just (Installed.Module
+                                    (Installed.installedUnitId pkg)
+                                    (Installed.exposedName exposedModule)) }
         -- On the other hand, a visible module might actually be itself
         -- a re-export! In this case, the re-export info for the package
         -- doing the re-export will point us to the original defining

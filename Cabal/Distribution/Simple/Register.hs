@@ -312,8 +312,10 @@ generalInstalledPackageInfo adjustRelIncDirs pkg abi_hash lib lbi clbi installDi
     IPI.exposedModules     = componentExposedModules clbi,
     IPI.hiddenModules      = otherModules bi,
     IPI.instantiatedWith   = map (\(k,(p,n)) ->
-                                   (k,IPI.OriginalModule (IPI.installedComponentId p) n))
+                                   (k,IPI.Module (IPI.installedUnitId p) n))
                                  (instantiatedWith lbi),
+    IPI.instantiatedDepends= [],
+    IPI.indefinite         = False,
     IPI.trusted            = IPI.trusted IPI.emptyInstalledPackageInfo,
     IPI.importDirs         = [ libdir installDirs | hasModules ],
     -- Note. the libsubdir and datasubdir templates have already been expanded
@@ -329,7 +331,8 @@ generalInstalledPackageInfo adjustRelIncDirs pkg abi_hash lib lbi clbi installDi
     IPI.extraGHCiLibraries = extraGHCiLibs bi,
     IPI.includeDirs        = absinc ++ adjustRelIncDirs relinc,
     IPI.includes           = includes bi,
-    IPI.depends            = map fst (componentPackageDeps clbi),
+    -- TODO: fix me!
+    IPI.depends            = map ((\cid -> IPI.UnitId cid []).fst) (componentPackageDeps clbi),
     IPI.ccOptions          = [], -- Note. NOT ccOptions bi!
                                  -- We don't want cc-options to be propagated
                                  -- to C compilations in other packages.

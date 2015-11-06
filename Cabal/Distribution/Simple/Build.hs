@@ -407,7 +407,7 @@ testSuiteLibV09AsLibAndExe pkg_descr
                 , componentPackageRenaming = componentPackageRenaming clbi
                 , componentId = ComponentId $ display (packageId pkg)
                 , componentCompatPackageKey = ComponentId $ display (packageId pkg)
-                , componentExposedModules = [IPI.ExposedModule m Nothing Nothing]
+                , componentExposedModules = [IPI.ExposedModule m Nothing]
                 }
     pkg = pkg_descr {
             package      = (package pkg_descr) {
