@@ -118,7 +118,7 @@ data InstalledPackageInfo
     }
     deriving (Generic, Read, Show)
 
-installedUnitId pkg = UnitId (installedComponentId pkg) []
+installedUnitId pkg = UnitId (installedComponentId pkg) (instantiatedWith pkg)
 
 instance Binary InstalledPackageInfo
 
