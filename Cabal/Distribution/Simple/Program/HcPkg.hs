@@ -39,7 +39,7 @@ import Prelude hiding (init)
 import Distribution.Package
          ( PackageId, ComponentId(..) )
 import Distribution.InstalledPackageInfo
-         ( InstalledPackageInfo, InstalledPackageInfo(..)
+         ( InstalledPackageInfo, InstalledPackageInfo(..), UnitId(..)
          , showInstalledPackageInfo
          , emptyInstalledPackageInfo, fieldsInstalledPackageInfo )
 import Distribution.ParseUtils
@@ -251,13 +251,13 @@ mungePackagePaths pkgroot pkginfo =
 -- field, so if it is missing then we fill it as the source package ID.
 setComponentId :: InstalledPackageInfo -> InstalledPackageInfo
 setComponentId pkginfo@InstalledPackageInfo {
-                        installedComponentId = ComponentId "",
-                        sourcePackageId    = pkgid
+                        installedUnitId = UnitId (ComponentId "") [],
+                        sourcePackageId = pkgid
                       }
                     = pkginfo {
                         --TODO use a proper named function for the conversion
                         -- from source package id to installed package id
-                        installedComponentId = ComponentId (display pkgid)
+                        installedUnitId = UnitId (ComponentId (display pkgid)) []
                       }
 setComponentId pkginfo = pkginfo
 

@@ -409,7 +409,7 @@ componentGhcOptions verbosity lbi bi clbi odir =
     toGhcDebugInfo NormalDebugInfo  = toFlag True
     toGhcDebugInfo MaximalDebugInfo = toFlag True
 
-    hole_insts = map (\(k,(p,n)) -> (k, (InstalledPackageInfo.installedComponentId p,n)))
+    hole_insts = map (\(k,(p,n)) -> (k, (InstalledPackageInfo.installedUnitId p,n)))
                  (instantiatedWith lbi)
 
 -- | Strip out flags that are not supported in ghci

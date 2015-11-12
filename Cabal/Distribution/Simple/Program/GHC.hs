@@ -14,6 +14,7 @@ module Distribution.Simple.Program.GHC (
 
 import Distribution.Simple.GHC.ImplInfo ( getImplInfo, GhcImplInfo(..) )
 import Distribution.Package
+import Distribution.InstalledPackageInfo ( UnitId )
 import Distribution.PackageDescription hiding (Flag)
 import Distribution.ModuleName
 import Distribution.Simple.Compiler hiding (Flag)
@@ -92,7 +93,7 @@ data GhcOptions = GhcOptions {
   ghcOptNoAutoLinkPackages :: Flag Bool,
 
   -- | What packages are implementing the signatures
-  ghcOptSigOf :: [(ModuleName, (ComponentId, ModuleName))],
+  ghcOptSigOf :: [(ModuleName, (UnitId, ModuleName))],
 
   -----------------
   -- Linker stuff

@@ -71,7 +71,7 @@ toCurrent ipi@InstalledPackageInfo{} =
       mkUnitId cid = Current.UnitId cid []
   in Current.InstalledPackageInfo {
     Current.sourcePackageId    = pid,
-    Current.installedComponentId         = mkComponentId pid,
+    Current.installedUnitId    = mkUnitId (mkComponentId pid),
     Current.compatPackageKey   = mkComponentId pid,
     Current.license            = convertLicense (license ipi),
     Current.copyright          = copyright ipi,
@@ -86,7 +86,6 @@ toCurrent ipi@InstalledPackageInfo{} =
     Current.abiHash            = Current.AbiHash "",
     Current.exposed            = exposed ipi,
     Current.exposedModules     = map (mkExposedModule . convertModuleName) (exposedModules ipi),
-    Current.instantiatedWith   = [],
     Current.hiddenModules      = map convertModuleName (hiddenModules ipi),
     Current.trusted            = Current.trusted Current.emptyInstalledPackageInfo,
     Current.importDirs         = importDirs ipi,

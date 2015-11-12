@@ -295,7 +295,8 @@ generalInstalledPackageInfo
 generalInstalledPackageInfo adjustRelIncDirs pkg abi_hash lib lbi clbi installDirs =
   InstalledPackageInfo {
     IPI.sourcePackageId    = packageId   pkg,
-    IPI.installedComponentId= componentId clbi,
+    IPI.installedUnitId    = IPI.UnitId (componentId clbi)
+                                        (map (\(k,(p,n)) -> (k,IPI.Module (IPI.installedUnitId p) n)) (instantiatedWith lbi)),
     IPI.compatPackageKey   = componentCompatPackageKey clbi,
     IPI.license            = license     pkg,
     IPI.copyright          = copyright   pkg,
@@ -311,9 +312,6 @@ generalInstalledPackageInfo adjustRelIncDirs pkg abi_hash lib lbi clbi installDi
     IPI.exposed            = libExposed  lib,
     IPI.exposedModules     = componentExposedModules clbi,
     IPI.hiddenModules      = otherModules bi,
-    IPI.instantiatedWith   = map (\(k,(p,n)) ->
-                                   (k,IPI.Module (IPI.installedUnitId p) n))
-                                 (instantiatedWith lbi),
     IPI.instantiatedDepends= [],
     IPI.indefinite         = False,
     IPI.trusted            = IPI.trusted IPI.emptyInstalledPackageInfo,

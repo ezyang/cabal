@@ -20,7 +20,7 @@ import Distribution.PackageDescription as PD
        ( PackageDescription(..), BuildInfo(..), Executable(..)
        , Library(..), libModules, hcOptions, usedExtensions )
 import Distribution.InstalledPackageInfo
-         ( emptyInstalledPackageInfo, )
+         ( emptyInstalledPackageInfo, UnitId(..) )
 import qualified Distribution.InstalledPackageInfo as InstalledPackageInfo
 import Distribution.Simple.PackageIndex (InstalledPackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
@@ -116,8 +116,8 @@ getInstalledPackages verbosity _packageDBs conf = do
    return $
       PackageIndex.fromList $
       map (\p -> emptyInstalledPackageInfo {
-                    InstalledPackageInfo.installedComponentId =
-                       ComponentId (display p),
+                    InstalledPackageInfo.installedUnitId =
+                       UnitId (ComponentId (display p)) [],
                     InstalledPackageInfo.sourcePackageId = p
                  }) $
       concatMap parseLine $

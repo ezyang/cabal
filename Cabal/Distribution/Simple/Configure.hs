@@ -413,8 +413,9 @@ configure (pkg_descr0, pbi) cfg
                 --      package ID into an installed package id we can use
                 --      for the internal package set. The open-codes use of
                 --      ComponentId . display here is a hack.
-                Installed.installedComponentId =
-                   ComponentId $ display $ pid,
+                Installed.installedUnitId =
+                   -- TODO: This won't work for Backpack
+                   Installed.UnitId (ComponentId (display pid)) [],
                 Installed.sourcePackageId = pid
               }
             internalPackageSet = PackageIndex.fromList [internalPackage]
@@ -560,8 +561,9 @@ configure (pkg_descr0, pbi) cfg
                             | (pkg, deps) <- broken ]
 
         let pseudoTopPkg = emptyInstalledPackageInfo {
-                Installed.installedComponentId =
-                   ComponentId (display (packageId pkg_descr)),
+                -- TODO Won't work with Backpack? Possibly doesn't matter
+                Installed.installedUnitId =
+                   Installed.UnitId (ComponentId (display (packageId pkg_descr))) [],
                 Installed.sourcePackageId = packageId pkg_descr,
                 Installed.depends =
                   map Installed.installedUnitId installDeps

@@ -32,7 +32,7 @@ module Distribution.InstalledPackageInfo (
         UnitId(..),
         Module(..), ExposedModule(..),
         ParseResult(..), PError(..), PWarning,
-        installedUnitId,
+        installedComponentId,
         emptyInstalledPackageInfo,
         parseInstalledPackageInfo,
         showInstalledPackageInfo,
@@ -77,9 +77,9 @@ import qualified Data.Char as Char
 data InstalledPackageInfo
    = InstalledPackageInfo {
         -- these parts are exactly the same as PackageDescription
-        sourcePackageId    :: PackageId,
-        installedComponentId:: ComponentId,
-        compatPackageKey   :: ComponentId,
+        sourcePackageId   :: PackageId,
+        installedUnitId   :: UnitId,
+        compatPackageKey  :: ComponentId,
         license           :: License,
         copyright         :: String,
         maintainer        :: String,
@@ -94,7 +94,6 @@ data InstalledPackageInfo
         abiHash           :: AbiHash,
         exposed           :: Bool,
         exposedModules    :: [ExposedModule],
-        instantiatedWith  :: [(ModuleName, Module)],
         instantiatedDepends :: [UnitId],
         indefinite        :: Bool,
         hiddenModules     :: [ModuleName],
@@ -118,7 +117,8 @@ data InstalledPackageInfo
     }
     deriving (Generic, Read, Show)
 
-installedUnitId pkg = UnitId (installedComponentId pkg) (instantiatedWith pkg)
+installedComponentId :: InstalledPackageInfo -> ComponentId
+installedComponentId = unitIdComponentId . installedUnitId
 
 instance Binary InstalledPackageInfo
 
@@ -136,7 +136,7 @@ emptyInstalledPackageInfo :: InstalledPackageInfo
 emptyInstalledPackageInfo
    = InstalledPackageInfo {
         sourcePackageId    = PackageIdentifier (PackageName "") noVersion,
-        installedComponentId         = ComponentId "",
+        installedUnitId    = UnitId (ComponentId "") [],
         compatPackageKey   = ComponentId "",
         license           = UnspecifiedLicense,
         copyright         = "",
@@ -152,7 +152,6 @@ emptyInstalledPackageInfo
         exposed           = False,
         exposedModules    = [],
         hiddenModules     = [],
-        instantiatedWith  = [],
         instantiatedDepends = [],
         indefinite        = False,
         trusted           = False,
@@ -282,14 +281,6 @@ parseInstalledPackageInfo =
     parseFieldsFlat (fieldsInstalledPackageInfo ++ deprecatedFieldDescrs)
     emptyInstalledPackageInfo
 
-parseInstantiatedWith :: Parse.ReadP r (ModuleName, Module)
-parseInstantiatedWith = do k <- parse
-                           _ <- Parse.char '='
-                           n <- parse
-                           _ <- Parse.char '@'
-                           p <- parse
-                           return (k, Module p n)
-
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
 
@@ -301,9 +292,6 @@ showInstalledPackageInfoField = showSingleNamedField fieldsInstalledPackageInfo
 
 showSimpleInstalledPackageInfoField :: String -> Maybe (InstalledPackageInfo -> String)
 showSimpleInstalledPackageInfoField = showSimpleSingleNamedField fieldsInstalledPackageInfo
-
-showInstantiatedWith :: (ModuleName, Module) -> Doc
-showInstantiatedWith (k, Module p m) = disp k <> text "=" <> disp m <> text "@" <> disp p
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
@@ -321,7 +309,7 @@ basicFieldDescrs =
                            packageVersion         (\ver pkg -> pkg{sourcePackageId=(sourcePackageId pkg){pkgVersion=ver}})
  , simpleField "id"
                            disp                   parse
-                           installedComponentId             (\pk pkg -> pkg{installedComponentId=pk})
+                           installedUnitId        (\uid pkg -> pkg{installedUnitId=uid})
  , simpleField "key"
                            disp                   parse
                            compatPackageKey       (\pk pkg -> pkg{compatPackageKey=pk})
@@ -370,9 +358,6 @@ installedFieldDescrs = [
  , simpleField "abi"
         disp               parse
         abiHash            (\abi    pkg -> pkg{abiHash=abi})
- , listField   "instantiated-with"
-        showInstantiatedWith parseInstantiatedWith
-        instantiatedWith   (\xs    pkg -> pkg{instantiatedWith=xs})
  , listField   "instantiated-depends"
         disp               parse
         instantiatedDepends (\xs pkg -> pkg{instantiatedDepends=xs})

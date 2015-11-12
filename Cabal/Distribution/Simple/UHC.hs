@@ -150,8 +150,8 @@ parsePackage x = map fst (filter (\ (_,y) -> null y) (readP_to_S parse x))
 -- | Create a trivial package info from a directory name.
 mkInstalledPackageInfo :: PackageId -> InstalledPackageInfo
 mkInstalledPackageInfo p = emptyInstalledPackageInfo
-  { installedComponentId = ComponentId (display p),
-    sourcePackageId     = p }
+  { installedUnitId = UnitId (ComponentId (display p)) [],
+    sourcePackageId = p }
 
 
 -- -----------------------------------------------------------------------------

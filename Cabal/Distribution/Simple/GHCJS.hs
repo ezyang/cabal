@@ -309,7 +309,7 @@ buildOrReplLib forRepl verbosity numJobs _pkg_descr lbi lib clbi = do
       ifReplLib = when forRepl
       comp = compiler lbi
       implInfo = getImplInfo comp
-      hole_insts = map (\(k,(p,n)) -> (k,(InstalledPackageInfo.installedComponentId p,n)))
+      hole_insts = map (\(k,(p,n)) -> (k,(InstalledPackageInfo.installedUnitId p,n)))
                        (instantiatedWith lbi)
       nativeToo = ghcjsNativeToo comp
 
