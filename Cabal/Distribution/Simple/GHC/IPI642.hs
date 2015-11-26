@@ -108,6 +108,7 @@ toCurrent ipi@InstalledPackageInfo{} =
     Current.sourcePackageId    = pid,
     Current.installedUnitId    = mkUnitId (mkComponentId pid),
     Current.compatPackageKey   = mkComponentId pid,
+    Current.componentName      = Current.ComponentName "",
     Current.abiHash            = Current.AbiHash "", -- bogus but old GHCs don't care.
     Current.license            = convertLicense (license ipi),
     Current.copyright          = copyright ipi,

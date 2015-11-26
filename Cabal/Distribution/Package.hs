@@ -25,6 +25,7 @@ module Distribution.Package (
         ComponentId(..),
         getHSLibraryName,
         InstalledPackageId, -- backwards compat
+        ComponentName(..),
 
         -- * Package source dependencies
         Dependency(..),
@@ -111,8 +112,7 @@ instance NFData PackageIdentifier where
 -- code closure of a component.  For non-Backpack components, it also
 -- serves as the basis for install paths, symbols, etc.
 --
-data ComponentId
-    = ComponentId String
+newtype ComponentId = ComponentId String
     deriving (Generic, Read, Show, Eq, Ord, Typeable, Data)
 
 type InstalledPackageId = ComponentId
@@ -131,6 +131,20 @@ instance NFData ComponentId where
 -- | Returns library name prefixed with HS, suitable for filenames
 getHSLibraryName :: ComponentId -> String
 getHSLibraryName (ComponentId s) = "HS" ++ s
+
+newtype ComponentName = ComponentName String
+    deriving (Generic, Read, Show, Eq, Ord, Typeable, Data)
+
+instance Binary ComponentName
+
+instance Text ComponentName where
+  disp (ComponentName str) = text str
+
+  parse = ComponentName `fmap` Parse.munch abi_char
+   where abi_char c = Char.isAlphaNum c -- for now?
+
+instance NFData ComponentName where
+    rnf (ComponentName x) = rnf x
 
 -- ------------------------------------------------------------
 -- * Package source dependencies

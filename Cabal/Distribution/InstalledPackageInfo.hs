@@ -31,6 +31,7 @@ module Distribution.InstalledPackageInfo (
         InstalledPackageInfo(..),
         UnitId(..),
         Module(..), ExposedModule(..),
+        ComponentName(..),
         ParseResult(..), PError(..), PWarning,
         installedComponentId,
         emptyInstalledPackageInfo,
@@ -52,8 +53,8 @@ import Distribution.ParseUtils
 import Distribution.License     ( License(..) )
 import Distribution.Package
          ( PackageName(..), PackageIdentifier(..)
-         , PackageId, ComponentId(..)
-         , packageName, packageVersion, ComponentId(..) )
+         , PackageId, ComponentId(..), ComponentName(..)
+         , packageName, packageVersion )
 import qualified Distribution.Package as Package
 import Distribution.ModuleName
          ( ModuleName )
@@ -80,6 +81,7 @@ data InstalledPackageInfo
         sourcePackageId   :: PackageId,
         installedUnitId   :: UnitId,
         compatPackageKey  :: ComponentId,
+        componentName     :: ComponentName,
         license           :: License,
         copyright         :: String,
         maintainer        :: String,
@@ -138,6 +140,7 @@ emptyInstalledPackageInfo
         sourcePackageId    = PackageIdentifier (PackageName "") noVersion,
         installedUnitId    = UnitId (ComponentId "") [],
         compatPackageKey   = ComponentId "",
+        componentName     = ComponentName "",
         license           = UnspecifiedLicense,
         copyright         = "",
         maintainer        = "",
@@ -313,6 +316,9 @@ basicFieldDescrs =
  , simpleField "key"
                            disp                   parse
                            compatPackageKey       (\pk pkg -> pkg{compatPackageKey=pk})
+ , simpleField "component-name"
+                           disp                   parse
+                           componentName          (\cname pkg -> pkg{componentName=cname})
  , simpleField "license"
                            disp                   parseLicenseQ
                            license                (\l pkg -> pkg{license=l})

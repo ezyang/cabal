@@ -73,6 +73,7 @@ toCurrent ipi@InstalledPackageInfo{} =
     Current.sourcePackageId    = pid,
     Current.installedUnitId    = mkUnitId (mkComponentId pid),
     Current.compatPackageKey   = mkComponentId pid,
+    Current.componentName      = Current.ComponentName "",
     Current.license            = convertLicense (license ipi),
     Current.copyright          = copyright ipi,
     Current.maintainer         = maintainer ipi,
