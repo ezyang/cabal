@@ -337,7 +337,7 @@ renderBuildTarget ql target pkgid =
     triple (BuildTargetModule    cn m) = (dispKind cn, dispCName cn, display m)
     triple (BuildTargetFile      cn f) = (dispKind cn, dispCName cn, f)
 
-    dispCName = componentStringName pkgid
+    dispCName = componentStringName
     dispKind  = showComponentKindShort . componentKind
 
 reportBuildTargetProblems :: [BuildTargetProblem] -> IO ()
@@ -440,7 +440,7 @@ pkgComponentInfo :: PackageDescription -> [ComponentInfo]
 pkgComponentInfo pkg =
     [ ComponentInfo {
         cinfoName    = componentName c,
-        cinfoStrName = componentStringName pkg (componentName c),
+        cinfoStrName = componentStringName (componentName c),
         cinfoSrcDirs = hsSourceDirs bi,
         cinfoModules = componentModules c,
         cinfoHsFiles = componentHsFiles c,
@@ -450,11 +450,11 @@ pkgComponentInfo pkg =
     | c <- pkgComponents pkg
     , let bi = componentBuildInfo c ]
 
-componentStringName :: Package pkg => pkg -> ComponentName -> ComponentStringName
-componentStringName pkg CLibName          = display (packageName pkg)
-componentStringName _   (CExeName  name)  = name
-componentStringName _   (CTestName  name) = name
-componentStringName _   (CBenchName name) = name
+componentStringName :: ComponentName -> ComponentStringName
+componentStringName (CLibName   name) = name
+componentStringName (CExeName   name) = name
+componentStringName (CTestName  name) = name
+componentStringName (CBenchName name) = name
 
 componentModules :: Component -> [ModuleName]
 componentModules (CLib   lib)   = libModules lib
@@ -494,8 +494,8 @@ data ComponentKind = LibKind | ExeKind | TestKind | BenchKind
   deriving (Eq, Ord, Show)
 
 componentKind :: ComponentName -> ComponentKind
-componentKind CLibName       = LibKind
-componentKind (CExeName  _)  = ExeKind
+componentKind (CLibName   _) = LibKind
+componentKind (CExeName   _) = ExeKind
 componentKind (CTestName  _) = TestKind
 componentKind (CBenchName _) = BenchKind
 

@@ -19,7 +19,7 @@ description:
   organizing, and cataloging Haskell libraries and tools.
 category: Distribution
 cabal-version: >=1.10
-build-type: Simple
+build-type: Custom
 -- If we use a new Cabal feature, this needs to be changed to Custom so
 -- we can bootstrap.
 
@@ -92,6 +92,9 @@ extra-source-files:
   tests/PackageTests/Haddock/NoCPP.hs
   tests/PackageTests/Haddock/Simple.hs
   tests/PackageTests/Haddock/my.cabal
+  tests/PackageTests/MultipleLibraries/p.cabal
+  tests/PackageTests/MultipleLibraries/p/P.hs
+  tests/PackageTests/MultipleLibraries/q/Q.hs
   tests/PackageTests/OrderFlags/Foo.hs
   tests/PackageTests/OrderFlags/my.cabal
   tests/PackageTests/PathsModule/Executable/Main.hs

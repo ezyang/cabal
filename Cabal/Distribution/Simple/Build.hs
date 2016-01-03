@@ -173,7 +173,7 @@ buildComponent verbosity numJobs pkg_descr lbi suffixes
                comp@(CLib lib) clbi distPref = do
     preprocessComponent pkg_descr comp lbi False verbosity suffixes
     extras <- preprocessExtras comp lbi
-    info verbosity "Building library..."
+    info verbosity $ "Building library " ++ libName lib ++ "..."
     let libbi = libBuildInfo lib
         lib' = lib { libBuildInfo = addExtraCSources libbi extras }
     buildLib verbosity numJobs pkg_descr lbi lib' clbi
@@ -185,7 +185,7 @@ buildComponent verbosity numJobs pkg_descr lbi suffixes
         installedPkgInfo = inplaceInstalledPackageInfo pwd distPref pkg_descr
                                                        (AbiHash "") lib' lbi clbi
 
-    registerPackage verbosity (compiler lbi) (withPrograms lbi) False
+    registerPackage verbosity (compiler lbi) (withPrograms lbi) True
                     (withPackageDB lbi) installedPkgInfo
 
 buildComponent verbosity numJobs pkg_descr lbi suffixes
@@ -374,6 +374,7 @@ testSuiteLibV09AsLibAndExe pkg_descr
   where
     bi  = testBuildInfo test
     lib = Library {
+            libName = testName test,
             exposedModules = [ m ],
             reexportedModules = [],
             requiredSignatures = [],
@@ -381,26 +382,28 @@ testSuiteLibV09AsLibAndExe pkg_descr
             libExposed     = True,
             libBuildInfo   = bi
           }
-    cid = computeComponentId (package pkg_descr)
+    cid = computeComponentId NoFlag
+                             (package pkg_descr)
                              (CTestName (testName test))
                              (map fst (componentPackageDeps clbi))
                              (flagAssignment lbi)
-    (pkg_name, compat_key) = computeCompatPackageKey
+    (compat_name, compat_key) = computeCompatPackageKey
                                 (compiler lbi) (package pkg_descr)
                                 (CTestName (testName test)) cid
     libClbi = LibComponentLocalBuildInfo
                 { componentPackageDeps = componentPackageDeps clbi
                 , componentPackageRenaming = componentPackageRenaming clbi
                 , componentId = cid
+                , componentCompatPackageName = compat_name
                 , componentCompatPackageKey = compat_key
                 , componentExposedModules = [IPI.ExposedModule m Nothing Nothing]
                 }
     pkg = pkg_descr {
-            package      = (package pkg_descr) { pkgName = pkg_name }
+            package      = (package pkg_descr) { pkgName = compat_name }
           , buildDepends = targetBuildDepends $ testBuildInfo test
           , executables  = []
           , testSuites   = []
-          , library      = Just lib
+          , libraries    = [lib]
           }
     ipi    = inplaceInstalledPackageInfo pwd distPref pkg (AbiHash "") lib lbi libClbi
     testDir = buildDir lbi </> stubName test

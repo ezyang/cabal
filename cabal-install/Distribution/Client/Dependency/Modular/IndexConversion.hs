@@ -65,15 +65,15 @@ convIPI sip = mkIndex . convIPI' sip
 -- | Convert a single installed package into the solver-specific format.
 convIP :: SI.InstalledPackageIndex -> InstalledPackageInfo -> (PN, I, PInfo)
 convIP idx ipi =
-  let ipid = IPI.installedComponentId ipi
-      i = I (pkgVersion (sourcePackageId ipi)) (Inst ipid)
-      pn = pkgName (sourcePackageId ipi)
-  in  case mapM (convIPId pn idx) (IPI.depends ipi) of
+  case mapM (convIPId pn idx) (IPI.depends ipi) of
         Nothing  -> (pn, i, PInfo []            M.empty (Just Broken))
         Just fds -> (pn, i, PInfo (setComp fds) M.empty Nothing)
  where
   -- We assume that all dependencies of installed packages are _library_ deps
-  setComp = setCompFlaggedDeps ComponentLib
+  ipid = IPI.installedComponentId ipi
+  i = I (pkgVersion (sourcePackageId ipi)) (Inst ipid)
+  pn = pkgName (sourcePackageId ipi)
+  setComp = setCompFlaggedDeps (ComponentLib (unPackageName pn))
 -- TODO: Installed packages should also store their encapsulations!
 
 -- | Convert dependencies specified by an installed package id into
@@ -120,7 +120,7 @@ convGPD os arch comp strfl pi
     conv = convCondTree os arch comp pi fds (const True)
   in
     PInfo
-      (maybe []    (conv ComponentLib                     libBuildInfo         ) libs    ++
+      (concatMap   (\(nm, ds) -> conv (ComponentLib nm)   libBuildInfo       ds) libs    ++
        maybe []    (convSetupBuildInfo pi)    (setupBuildInfo pkg)    ++
        concatMap   (\(nm, ds) -> conv (ComponentExe nm)   buildInfo          ds) exes    ++
       prefix (Stanza (SN pi TestStanzas))

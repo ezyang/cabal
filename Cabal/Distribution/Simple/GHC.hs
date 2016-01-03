@@ -474,10 +474,8 @@ buildOrReplLib :: Bool -> Verbosity  -> Cabal.Flag (Maybe Int)
                -> PackageDescription -> LocalBuildInfo
                -> Library            -> ComponentLocalBuildInfo -> IO ()
 buildOrReplLib forRepl verbosity numJobs pkg_descr lbi lib clbi = do
-  let libName = componentId clbi
-      libTargetDir
-        | componentId clbi == localComponentId lbi = buildDir lbi
-        | otherwise = buildDir lbi </> display libName
+  let cid = componentId clbi
+      libTargetDir = libBuildDir lbi clbi
       whenVanillaLib forceVanilla =
         when (forceVanilla || withVanillaLib lbi)
       whenProfLib = when (withProfLib lbi)
@@ -506,9 +504,11 @@ buildOrReplLib forRepl verbosity numJobs pkg_descr lbi lib clbi = do
   -- Determine if program coverage should be enabled and if so, what
   -- '-hpcdir' should be.
   let isCoverageEnabled = fromFlag $ configCoverage $ configFlags lbi
-      -- Component name. Not 'libName' because that has the "HS" prefix
-      -- that GHC gives Haskell libraries.
-      cname = display $ PD.package $ localPkgDescr lbi
+      -- Component name. Not 'cid' because that has hashes and all
+      -- of the other gunk.  (But maybe it should?!  Previously the
+      -- rationale was to make sure there was no HS prefix, but
+      -- 'cid's don't have those prefixes...)
+      cname = display cid
       distPref = fromFlag $ configDistPref $ configFlags lbi
       hpcdir way
         | forRepl = Mon.mempty  -- HPC is not supported in ghci
@@ -642,13 +642,13 @@ buildOrReplLib forRepl verbosity numJobs pkg_descr lbi lib clbi = do
                       (cSources libBi)
         cSharedObjs = map (`replaceExtension` ("dyn_" ++ objExtension))
                       (cSources libBi)
-        cid = compilerId (compiler lbi)
-        vanillaLibFilePath = libTargetDir </> mkLibName           libName
-        profileLibFilePath = libTargetDir </> mkProfLibName       libName
-        sharedLibFilePath  = libTargetDir </> mkSharedLibName cid libName
-        ghciLibFilePath    = libTargetDir </> Internal.mkGHCiLibName libName
+        compiler_id = compilerId (compiler lbi)
+        vanillaLibFilePath = libTargetDir </> mkLibName cid
+        profileLibFilePath = libTargetDir </> mkProfLibName cid
+        sharedLibFilePath  = libTargetDir </> mkSharedLibName compiler_id cid
+        ghciLibFilePath    = libTargetDir </> Internal.mkGHCiLibName cid
         libInstallPath = libdir $ absoluteInstallDirs pkg_descr lbi NoCopyDest
-        sharedLibInstallPath = libInstallPath </> mkSharedLibName cid libName
+        sharedLibInstallPath = libInstallPath </> mkSharedLibName compiler_id cid
 
     stubObjs <- fmap catMaybes $ sequence
       [ findFileWithExtension [objExtension] [libTargetDir]
@@ -1023,7 +1023,7 @@ libAbiHash verbosity _pkg_descr lbi lib clbi = do
   let
       comp        = compiler lbi
       vanillaArgs =
-        (componentGhcOptions verbosity lbi libBi clbi (buildDir lbi))
+        (componentGhcOptions verbosity lbi libBi clbi (libBuildDir lbi clbi))
         `mappend` mempty {
           ghcOptMode         = toFlag GhcModeAbiHash,
           ghcOptInputModules = toNubListR $ exposedModules lib
@@ -1105,7 +1105,7 @@ installLib    :: Verbosity
               -> Library
               -> ComponentLocalBuildInfo
               -> IO ()
-installLib verbosity lbi targetDir dynlibTargetDir builtDir _pkg lib clbi = do
+installLib verbosity lbi targetDir dynlibTargetDir _builtDir _pkg lib clbi = do
   -- copy .hi files over:
   whenVanilla $ copyModuleFiles "hi"
   whenProf    $ copyModuleFiles "p_hi"
@@ -1118,6 +1118,8 @@ installLib verbosity lbi targetDir dynlibTargetDir builtDir _pkg lib clbi = do
   whenShared  $ installShared   builtDir dynlibTargetDir sharedLibName
 
   where
+    builtDir = libBuildDir lbi clbi
+
     install isShared srcDir dstDir name = do
       let src = srcDir </> name
           dst = dstDir </> name
@@ -1137,12 +1139,12 @@ installLib verbosity lbi targetDir dynlibTargetDir builtDir _pkg lib clbi = do
       findModuleFiles [builtDir] [ext] (libModules lib)
       >>= installOrdinaryFiles verbosity targetDir
 
-    cid = compilerId (compiler lbi)
-    libName = componentId clbi
-    vanillaLibName = mkLibName              libName
-    profileLibName = mkProfLibName          libName
-    ghciLibName    = Internal.mkGHCiLibName libName
-    sharedLibName  = (mkSharedLibName cid)  libName
+    compiler_id = compilerId (compiler lbi)
+    cid = componentId clbi
+    vanillaLibName = mkLibName              cid
+    profileLibName = mkProfLibName          cid
+    ghciLibName    = Internal.mkGHCiLibName cid
+    sharedLibName  = (mkSharedLibName compiler_id) cid
 
     hasLib    = not $ null (libModules lib)
                    && null (cSources (libBuildInfo lib))

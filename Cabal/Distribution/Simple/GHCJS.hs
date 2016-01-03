@@ -301,7 +301,7 @@ buildOrReplLib :: Bool -> Verbosity  -> Cabal.Flag (Maybe Int)
                -> PackageDescription -> LocalBuildInfo
                -> Library            -> ComponentLocalBuildInfo -> IO ()
 buildOrReplLib forRepl verbosity numJobs _pkg_descr lbi lib clbi = do
-  let libName@(ComponentId cname) = componentId clbi
+  let cid@(ComponentId cname) = componentId clbi
       libTargetDir = buildDir lbi
       whenVanillaLib forceVanilla =
         when (not forRepl && (forceVanilla || withVanillaLib lbi))
@@ -342,7 +342,7 @@ buildOrReplLib forRepl verbosity numJobs _pkg_descr lbi lib clbi = do
       baseOpts    = componentGhcOptions verbosity lbi libBi clbi libTargetDir
       linkJsLibOpts = mempty {
                         ghcOptExtra = toNubListR $
-                          [ "-link-js-lib"     , getHSLibraryName libName
+                          [ "-link-js-lib"     , getHSLibraryName cid
                           , "-js-lib-outputdir", libTargetDir ] ++
                           concatMap (\x -> ["-js-lib-src",x]) jsSrcs
                       }
@@ -457,11 +457,11 @@ buildOrReplLib forRepl verbosity numJobs _pkg_descr lbi lib clbi = do
                       (cSources libBi)
         cSharedObjs = map (`replaceExtension` ("dyn_" ++ objExtension))
                       (cSources libBi)
-        cid = compilerId (compiler lbi)
-        vanillaLibFilePath = libTargetDir </> mkLibName            libName
-        profileLibFilePath = libTargetDir </> mkProfLibName        libName
-        sharedLibFilePath  = libTargetDir </> mkSharedLibName cid  libName
-        ghciLibFilePath    = libTargetDir </> Internal.mkGHCiLibName libName
+        compiler_id = compilerId (compiler lbi)
+        vanillaLibFilePath = libTargetDir </> mkLibName            cid
+        profileLibFilePath = libTargetDir </> mkProfLibName        cid
+        sharedLibFilePath  = libTargetDir </> mkSharedLibName compiler_id cid
+        ghciLibFilePath    = libTargetDir </> Internal.mkGHCiLibName cid
 
     hObjs     <- Internal.getHaskellObjects implInfo lib lbi
                       libTargetDir objExtension True
@@ -755,12 +755,12 @@ installLib verbosity lbi targetDir dynlibTargetDir builtDir _pkg lib clbi = do
       findModuleFiles [builtDir] [ext] (libModules lib)
       >>= installOrdinaryFiles verbosity targetDir
 
-    cid = compilerId (compiler lbi)
-    libName = componentId clbi
-    vanillaLibName = mkLibName              libName
-    profileLibName = mkProfLibName          libName
-    ghciLibName    = Internal.mkGHCiLibName libName
-    sharedLibName  = (mkSharedLibName cid)  libName
+    compiler_id = compilerId (compiler lbi)
+    cid = componentId clbi
+    vanillaLibName = mkLibName              cid
+    profileLibName = mkProfLibName          cid
+    ghciLibName    = Internal.mkGHCiLibName cid
+    sharedLibName  = (mkSharedLibName compiler_id)  cid
 
     hasLib    = not $ null (libModules lib)
                    && null (cSources (libBuildInfo lib))
