@@ -88,6 +88,7 @@ import Distribution.Compat.Binary (Binary)
 import Data.Graph
 import Data.List (nub, find, stripPrefix)
 import Data.Maybe
+import qualified Data.Map as Map
 import Data.Tree  (flatten)
 import GHC.Generics (Generic)
 import System.FilePath
@@ -160,8 +161,11 @@ instance Binary LocalBuildInfo
 -- on the package ID.
 localComponentId :: LocalBuildInfo -> ComponentId
 localComponentId lbi
+    -- TODO: factor this out
     = case localUnitId lbi of
         SimpleUnitId cid -> cid
+        UnitId cid _ -> cid
+        UnitIdVar _ -> error "localComponentId: UnitIdVar"
 
 -- | Extract the 'UnitId' from the library component of a
 -- 'LocalBuildInfo' if it exists, or make a fake unit ID based on
@@ -367,6 +371,8 @@ getLocalComponent pkg_descr clbi = getComponent pkg_descr (componentLocalName cl
 componentComponentId :: ComponentLocalBuildInfo -> ComponentId
 componentComponentId clbi = case componentUnitId clbi of
                                 SimpleUnitId cid -> cid
+                                UnitId cid _ -> cid
+                                UnitIdVar _ -> error "localComponentId: UnitIdVar"
 
 componentBuildDir :: LocalBuildInfo -> ComponentLocalBuildInfo -> FilePath
 componentBuildDir lbi LibComponentLocalBuildInfo{ componentIsPublic = True }
@@ -376,7 +382,10 @@ componentBuildDir lbi LibComponentLocalBuildInfo{ componentIsPublic = True }
 -- libraries so that we can handle building them multiple times.
 componentBuildDir lbi clbi
     = buildDir lbi </> case componentLocalName clbi of
-                        CLibName s   -> s
+                        CLibName s
+                            | UnitId _ insts <- componentUnitId clbi
+                            , not (Map.null insts) -> hashUnitId (componentUnitId clbi)
+                            | otherwise -> s
                         CExeName s   -> s
                         CTestName s  -> s
                         CBenchName s -> s
@@ -539,11 +548,11 @@ depLibraryPaths inplace relative lbi clbi = do
                | otherwise  = libdir installDirs
 
     let -- TODO: this is kind of inefficient
-        internalDeps = [ cid
-                       | (cid, _) <- componentPackageDeps clbi
+        internalDeps = [ uid
+                       | (uid, _) <- componentPackageDeps clbi
                        -- Test that it's internal
                        , (sub_clbi, _) <- componentsConfigs lbi
-                       , componentUnitId sub_clbi == cid ]
+                       , componentUnitId sub_clbi == uid ]
         internalLibs = [ getLibDir sub_clbi
                        | sub_clbi <- componentsInBuildOrder'
                                         lbi internalDeps ]

@@ -36,7 +36,7 @@ module Distribution.PackageDescription (
         -- ** Renaming
         ModuleRenaming(..),
         defaultRenaming,
-        lookupRenaming,
+        isDefaultRenaming,
 
         -- ** Libraries
         Library(..),
@@ -137,8 +137,6 @@ import Control.Monad               (MonadPlus(mplus,mzero), ap)
 import GHC.Generics                (Generic)
 import Text.PrettyPrint as Disp
 import qualified Data.Char as Char (isAlphaNum, isDigit, toLower)
-import qualified Data.Map as Map
-import Data.Map                    (Map)
 
 -- -----------------------------------------------------------------------------
 -- The PackageDescription type
@@ -344,14 +342,15 @@ data ModuleRenaming = ModuleRenaming Bool [(ModuleName, ModuleName)]
 defaultRenaming :: ModuleRenaming
 defaultRenaming = ModuleRenaming True []
 
-lookupRenaming :: Package pkg => pkg -> Map PackageName ModuleRenaming -> ModuleRenaming
-lookupRenaming = Map.findWithDefault defaultRenaming . packageName
-
 instance Binary ModuleRenaming where
 
 instance Monoid ModuleRenaming where
     mempty = ModuleRenaming False []
     mappend = (Semi.<>)
+
+isDefaultRenaming :: ModuleRenaming -> Bool
+isDefaultRenaming (ModuleRenaming True []) = True
+isDefaultRenaming _ = False
 
 instance Semigroup ModuleRenaming where
     ModuleRenaming b rns <> ModuleRenaming b' rns'
@@ -846,7 +845,7 @@ data BuildInfo = BuildInfo {
                                                 -- with x-, stored in a
                                                 -- simple assoc-list.
         targetBuildDepends :: [Dependency], -- ^ Dependencies specific to a library or executable target
-        targetBuildRenaming :: Map PackageName ModuleRenaming
+        backpackIncludes :: [(PackageName, (ModuleRenaming, ModuleRenaming))]
     }
     deriving (Generic, Show, Read, Eq, Typeable, Data)
 
@@ -882,7 +881,7 @@ instance Monoid BuildInfo where
     sharedOptions       = [],
     customFieldsBI      = [],
     targetBuildDepends  = [],
-    targetBuildRenaming = Map.empty
+    backpackIncludes    = []
   }
   mappend = (Semi.<>)
 
@@ -916,13 +915,12 @@ instance Semigroup BuildInfo where
     sharedOptions       = combine    sharedOptions,
     customFieldsBI      = combine    customFieldsBI,
     targetBuildDepends  = combineNub targetBuildDepends,
-    targetBuildRenaming = combineMap targetBuildRenaming
+    backpackIncludes    = combine backpackIncludes
   }
     where
       combine    field = field a `mappend` field b
       combineNub field = nub (combine field)
       combineMby field = field b `mplus` field a
-      combineMap field = Map.unionWith mappend (field a) (field b)
 
 emptyBuildInfo :: BuildInfo
 emptyBuildInfo = mempty

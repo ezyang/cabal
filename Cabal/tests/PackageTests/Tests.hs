@@ -505,6 +505,19 @@ tests config = do
       cabal "register" ["--assume-deps-up-to-date", "RegisterAssumeDepsUpToDate", "--gen-pkg-config=" ++ main_reg]
       ghcPkg "register" [pkg_dir </> main_reg]
 
+  tc "Backpack/Includes1" $ do
+      cabal "configure" []
+      r <- shouldFail $ cabal' "build" []
+      assertBool "error should be in B.hs" $
+          resultOutput r =~ "^B.hs:"
+      assertBool "error should be \"Could not find module Data.Set\"" $
+          resultOutput r =~ "(Could not find module|Failed to load interface).*Data.Set"
+
+  tc "Backpack/Includes2" $ do
+      cabal "configure" []
+      cabal "build" []
+      runExe' "exe" [] >>= assertOutputContains "minemysql minepostgresql"
+
   where
     ghc_pkg_guess bin_name = do
         cwd <- packageDir

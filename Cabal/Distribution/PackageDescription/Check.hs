@@ -931,13 +931,10 @@ checkCabalVersion pkg =
         ++ "at least 'cabal-version: >= 1.21'."
 
     -- check use of thinning and renaming
-  , checkVersion [1,21] (not (null depsUsingThinningRenamingSyntax)) $
+  , checkVersion [1,23] usesBackpackIncludes $
       PackageDistInexcusable $
-           "The package uses "
-        ++ "thinning and renaming in the 'build-depends' field: "
-        ++ commaSep (map display depsUsingThinningRenamingSyntax)
-        ++ ". To use this new syntax, the package needs to specify at least"
-        ++ "'cabal-version: >= 1.21'."
+           "To use the 'backpack-includes' field the package needs to specify "
+        ++ "at least 'cabal-version: >= 1.23'."
 
     -- check use of 'extra-framework-dirs' field
   , checkVersion [1,23] (any (not . null) (buildInfoField extraFrameworkDirs)) $
@@ -1137,13 +1134,7 @@ checkCabalVersion pkg =
     depsUsingWildcardSyntax = [ dep | dep@(Dependency _ vr) <- buildDepends pkg
                                     , usesWildcardSyntax vr ]
 
-    -- TODO: If the user writes build-depends: foo with (), this is
-    -- indistinguishable from build-depends: foo, so there won't be an
-    -- error even though there should be
-    depsUsingThinningRenamingSyntax =
-      [ name
-      | bi <- allBuildInfo pkg
-      , (name, _) <- Map.toList (targetBuildRenaming bi) ]
+    usesBackpackIncludes = any (not . null . backpackIncludes) (allBuildInfo pkg)
 
     testedWithUsingWildcardSyntax =
       [ Dependency (PackageName (display compiler)) vr

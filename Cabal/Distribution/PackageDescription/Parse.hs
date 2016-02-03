@@ -379,6 +379,28 @@ validateBenchmark line stanza =
 -- ---------------------------------------------------------------------------
 -- The BuildInfo type
 
+-- TODO: switch to split view
+showBackpackInclude :: (PackageName, (ModuleRenaming, ModuleRenaming)) -> Doc
+showBackpackInclude (pkg_name, (prov_rn, req_rn)) = do
+    disp pkg_name <+> disp prov_rn
+                  <+> (if isDefaultRenaming req_rn
+                        then empty
+                        else text "requires" <+> disp req_rn)
+
+parseBackpackInclude :: ReadP r (PackageName, (ModuleRenaming, ModuleRenaming))
+parseBackpackInclude = do
+    pkg_name <- parse
+    skipSpaces
+    prov_rn <- parse
+    ModuleRenaming _ req_rn0 <- (string "requires" >> skipSpaces >> parse) <++ return defaultRenaming
+    -- Requirements don't really care if they're mentioned
+    -- or not (since you can't thin a requirement.)  But
+    -- we have a little hack in Configure to combine
+    -- the provisions and requirements together before passing
+    -- them to GHC, and so the most neutral choice for a requirement
+    -- is for the "with" field to be False, so we correctly
+    -- thin provisions.
+    return (pkg_name, (prov_rn, ModuleRenaming False req_rn0))
 
 binfoFieldDescrs :: [FieldDescr BuildInfo]
 binfoFieldDescrs =
@@ -390,6 +412,9 @@ binfoFieldDescrs =
  , commaListFieldWithSep vcat "build-depends"
            disp                   parse
            targetBuildDepends (\xs binfo -> binfo{targetBuildDepends=xs})
+ , commaListFieldWithSep vcat "backpack-includes"
+           showBackpackInclude    parseBackpackInclude
+           backpackIncludes   (\xs binfo -> binfo{backpackIncludes=xs})
  , spaceListField "cpp-options"
            showToken          parseTokenQ'
            cppOptions          (\val binfo -> binfo{cppOptions=val})

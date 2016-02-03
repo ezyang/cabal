@@ -50,6 +50,8 @@ import Distribution.Text ( display, simpleParse )
 import Distribution.Utils.NubList ( toNubListR )
 import Distribution.Verbosity
 import Language.Haskell.Extension
+import Distribution.Backpack (unitIdFreeHoles)
+import qualified Data.Set as Set
 
 import qualified Data.Map as M
 import Data.Char                ( isSpace )
@@ -275,6 +277,7 @@ componentGhcOptions verbosity lbi bi clbi odir =
         LibComponentLocalBuildInfo { componentCompatPackageKey = pk }
           -> toFlag pk
         _ -> Mon.mempty,
+      ghcOptNoCode          = toFlag $ not (Set.null (unitIdFreeHoles (componentUnitId clbi))),
       ghcOptPackageDBs      = withPackageDB lbi,
       ghcOptPackages        = toNubListR $ mkGhcOptPackages clbi,
       ghcOptSplitObjs       = toFlag (splitObjs lbi),

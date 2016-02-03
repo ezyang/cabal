@@ -1,0 +1,3 @@
+module Database where
+data Database
+databaseName :: String

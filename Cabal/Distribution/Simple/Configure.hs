@@ -74,9 +74,12 @@ import qualified Distribution.Simple.InstallDirs as InstallDirs
 import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.Utils
 import Distribution.Simple.Register (createInternalPackageDB)
+import Distribution.Utils.Base62
 import Distribution.System
 import Distribution.Version
 import Distribution.Verbosity
+import Distribution.Backpack
+import Distribution.ModuleShaping
 
 import qualified Distribution.Simple.GHC   as GHC
 import qualified Distribution.Simple.GHCJS as GHCJS
@@ -91,14 +94,13 @@ import Control.Exception
     ( Exception, evaluate, throw, throwIO, try )
 import Control.Exception ( ErrorCall )
 import Control.Monad
-    ( liftM, when, unless, foldM, filterM, mplus )
+    ( liftM, when, unless, foldM, filterM, mplus, forM )
 import Distribution.Compat.Binary ( decodeOrFailIO, encode )
-import GHC.Fingerprint ( Fingerprint(..), fingerprintString )
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Lazy.Char8 as BLC8
 import Data.List
-    ( (\\), nub, partition, isPrefixOf, inits, stripPrefix )
+    ( (\\), nub, partition, isPrefixOf, inits, stripPrefix, sort )
 import Data.Maybe
     ( isNothing, catMaybes, fromMaybe, mapMaybe, isJust )
 import Data.Either
@@ -108,10 +110,9 @@ import Data.Monoid as Mon ( Monoid(..) )
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Traversable
-    ( mapM )
+    ( mapM, mapAccumL )
 import Data.Typeable
-import Data.Char ( chr, isAlphaNum )
-import Numeric ( showIntAtBase )
+import Data.Char ( isAlphaNum )
 import System.Directory
     ( doesFileExist, createDirectoryIfMissing, getTemporaryDirectory )
 import System.FilePath
@@ -124,7 +125,8 @@ import Distribution.Text
     ( Text(disp), defaultStyle, display, simpleParse )
 import Text.PrettyPrint
     ( Doc, (<>), (<+>), ($+$), char, comma, empty, hsep, nest
-    , punctuate, quotes, render, renderStyle, sep, text )
+    , punctuate, quotes, render, renderStyle, sep, text, vcat, hang )
+import qualified Text.PrettyPrint as Disp
 import Distribution.Compat.Environment ( lookupEnv )
 import Distribution.Compat.Exception ( catchExit, catchIO )
 
@@ -574,9 +576,9 @@ configure (pkg_descr0', pbi) cfg = do
       case mkComponentsGraph pkg_descr internalPkgDeps of
         Left  componentCycle -> reportComponentCycle componentCycle
         Right comps          ->
-          mkComponentsLocalBuildInfo cfg comp packageDependsIndex pkg_descr
+          mkComponentsLocalBuildInfo verbosity cfg comp packageDependsIndex pkg_descr
                                      internalPkgDeps externalPkgDeps
-                                     comps (configConfigurationsFlags cfg)
+                                     (map fst comps) (configConfigurationsFlags cfg)
 
     -- Decide if we're going to compile with split objects.
     split_objs :: Bool <-
@@ -954,9 +956,7 @@ configureFinalizedPackage verbosity cfg
 checkCompilerProblems :: Compiler -> PackageDescription -> IO ()
 checkCompilerProblems comp pkg_descr = do
     unless (renamingPackageFlagsSupported comp ||
-                and [ True
-                    | bi <- allBuildInfo pkg_descr
-                    , _ <- Map.elems (targetBuildRenaming bi)]) $
+                any (not . null . backpackIncludes) (allBuildInfo pkg_descr)) $
         die $ "Your compiler does not support thinning and renaming on "
            ++ "package flags.  To use this feature you probably must use "
            ++ "GHC 7.9 or later."
@@ -1503,17 +1503,6 @@ computeComponentId mb_explicit pid cname dep_ipids flagAssignment = do
                             Nothing -> ""
                             Just s -> "-" ++ s)
 
-hashToBase62 :: String -> String
-hashToBase62 s = showFingerprint $ fingerprintString s
-  where
-    showIntAtBase62 x = showIntAtBase 62 representBase62 x ""
-    representBase62 x
-        | x < 10 = chr (48 + x)
-        | x < 36 = chr (65 + x - 10)
-        | x < 62 = chr (97 + x - 36)
-        | otherwise = '@'
-    showFingerprint (Fingerprint a b) = showIntAtBase62 a ++ showIntAtBase62 b
-
 -- | Computes the package name for a library.  If this is the public
 -- library, it will just be the original package name; otherwise,
 -- it will be a munged package name recording the original package
@@ -1626,146 +1615,369 @@ computeCompatPackageKey comp pkg_name pkg_version (SimpleUnitId (ComponentId str
             rehashed_key = hashToBase62 str
         in fromMaybe rehashed_key (mb_verbatim_key `mplus` mb_truncated_key)
     | otherwise = str
+computeCompatPackageKey comp pkg_name pkg_version uid@UnitId{}
+    = display uid
+
+-- | A configured component, we know exactly what its 'ComponentId' is,
+-- and the 'ComponentId's of the things it depends on.
+data ConfiguredComponent
+    = ConfiguredComponent {
+        cc_cid :: ComponentId,
+        -- The package this component came from.
+        cc_pkgid :: PackageId,
+        cc_component :: Component,
+        -- Not resolved yet; component configuration only looks at ComponentIds.
+        cc_includes :: [(ComponentId, PackageId, (ModuleRenaming, ModuleRenaming))]
+      }
+
+-- Compute the 'ComponentId's for a graph of 'Component's.  The
+-- list of internal components must be topologically sorted
+-- based on internal package dependencies, so that any internal
+-- dependency points to an entry earlier in the list.
+configureComponents
+    :: ConfigFlags
+    -> PackageDescription
+    -> FlagAssignment
+    -> Map PackageName (ComponentId, PackageId)
+    -> [Component]
+    -> [ConfiguredComponent]
+configureComponents cfg pkg_descr flagAssignment pkg_map0 components
+    = snd (mapAccumL go pkg_map0 components)
+  where
+    go pkg_map component = (pkg_map', conf)
+      where bi = componentBuildInfo component
+            deps = [ (cid, pkgid)
+                   | Dependency name _ <- targetBuildDepends bi
+                   , Just (cid, pkgid) <- [ Map.lookup name pkg_map ] ]
+            -- The includes are based off of 'backpack-includes', but we
+            -- also fill in a default, implicit include, for everything
+            -- that is in 'build-depends' but not in 'backpack-includes'.
+            includes0 = [ (cid, pid, rns)
+                        | (name, rns) <- backpackIncludes bi
+                        , Just (cid, pid) <- [ Map.lookup name pkg_map ] ]
+            used_includes = Set.fromList (map (\(cid,_,_) -> cid) includes0)
+            includes1 = map (\(cid, pid) -> (cid, pid, (defaultRenaming, defaultRenaming)))
+                      $ filter (flip Set.notMember used_includes . fst) deps
+            includes = includes0 ++ includes1
+            cid = computeComponentId (configIPID cfg) (package pkg_descr)
+                    (componentName component)
+                    (map fst deps) flagAssignment
+            pkg_map'
+                | CLibName str <- componentName component
+                = Map.insert (PackageName str) (cid, package pkg_descr) pkg_map
+                | otherwise = pkg_map
+            conf = ConfiguredComponent {
+                    cc_cid = cid,
+                    cc_pkgid = package pkg_descr,
+                    cc_component = component,
+                    cc_includes = includes
+                   }
+
+-- | A linked component, we know how it is instantiated and thus how we are
+-- going to build it.
+data LinkedComponent
+    = LinkedComponent {
+        lc_uid :: UnitId,
+        lc_pkgid :: PackageId,
+        lc_cid :: ComponentId,
+        lc_component :: Component,
+        lc_shape :: ModuleShape,
+        lc_includes :: [(UnitId, ModuleRenaming)],
+        -- PackageId here is a bit dodgy, but its just for
+        -- BC so it shouldn't matter.
+        lc_depends :: [(UnitId, PackageId)]
+      }
+
+instance PackageInstalled LinkedComponent where
+    installedDepends = map fst . lc_depends
+
+instance HasUnitId LinkedComponent where
+    installedUnitId = lc_uid
+
+instance Package LinkedComponent where
+    packageId = lc_pkgid
+
+-- We can't cache these values because they need to be changed
+-- when we substitute over a 'LinkedComponent'.  By varying
+-- these over 'UnitId', we can support old GHCs. Nice!
+
+lc_compat_name :: LinkedComponent -> PackageName
+lc_compat_name LinkedComponent{
+        lc_pkgid = PackageIdentifier pkg_name _,
+        lc_component = component
+    }
+    = computeCompatPackageName pkg_name (componentName component)
+
+lc_compat_key :: LinkedComponent -> Compiler -> String
+lc_compat_key lc@LinkedComponent {
+        lc_pkgid = PackageIdentifier _ pkg_ver,
+        lc_uid = uid
+    } comp -- TODO: A wart. But the alternative is to store
+           -- the Compiler in the LinkedComponent
+    = computeCompatPackageKey comp (lc_compat_name lc) pkg_ver uid
+
+instance ModSubst LinkedComponent where
+    modSubst subst lc
+        = lc {
+            lc_uid = modSubst subst (lc_uid lc),
+            lc_shape = modSubst subst (lc_shape lc),
+            -- NO substitution; must pass GHC unsubstituted versions!!
+            -- lc_includes = map (\(uid, rns) -> (modSubst subst uid, rns)) (lc_includes lc),
+            lc_depends = map (\(uid, pkgid) -> (modSubst subst uid, pkgid)) (lc_depends lc)
+          }
+
+-- Handle mix-in linking for components.  In the absence of Backpack,
+-- every ComponentId gets converted into a UnitId by way of SimpleUnitId.
+linkComponents
+    :: Map ComponentId (UnitId, ModuleShape)
+    -> [ConfiguredComponent]
+    -> [LinkedComponent]
+linkComponents pkg_map0 components
+    = snd (mapAccumL go pkg_map0 components)
+  where
+    go pkg_map ConfiguredComponent{
+      cc_cid = cid,
+      cc_pkgid = pkgid,
+      cc_component = component,
+      cc_includes = cid_includes
+    } = (pkg_map', linked_c)
+      where
+        src_reqs = case component of
+                    CLib lib -> requiredSignatures lib
+                    _ -> []
+        -- TODO: reexports
+        src_provs = case component of
+                     CLib lib -> exposedModules lib
+                     _ -> []
+        src_reexports
+            = case component of
+                CLib lib -> reexportedModules lib
+                _ -> []
+
+        unlinked_includes = [ (lookupUid cid, pid, rns)
+                            | (cid, pid, rns) <- cid_includes ]
+        lookupUid cid = fromMaybe (error "linkComponent: lookupUid")
+                                  (Map.lookup cid pkg_map)
+        (linked_shape, linked_deps, linked_includes) = runUnifyM $ do
+            let convertInclude ((uid, shape), pid, rns@(prov_rns, req_rns)) = do
+                    let hsubst = renameReqSubst req_rns
+                    uid_u <- convertUnitId (modSubst hsubst uid)
+                    shape_u <- convertModuleShape rns shape
+                    return (shape_u, (uid_u, pid, prov_rns))
+                convertReq req = do
+                    req_u <- convertModule (ModuleVar req)
+                    return (Map.empty, Map.singleton req req_u)
+            (shapes_u, includes_u) <- fmap unzip (mapM convertInclude unlinked_includes)
+            src_reqs_u <- mapM convertReq src_reqs
+            shape_u <- foldM mixLink emptyModuleShapeU (shapes_u ++ src_reqs_u)
+            let convertIncludeU (uid_u, pid, rns) = do
+                    uid <- convertUnitIdU uid_u
+                    return ((uid, rns), (uid, pid))
+            shape <- convertModuleShapeU shape_u
+            includes_deps <- mapM convertIncludeU includes_u
+            let (includes, deps) = unzip includes_deps
+            return (shape, deps, includes)
+        -- TODO: need a lot more sanity checks, and error reporting
+        reqs = modShapeRequires linked_shape
+        -- check that there aren't pre-filled requirements...
+        uid = if Set.null reqs
+                then SimpleUnitId cid
+                else UnitId cid (Map.fromSet ModuleVar reqs)
+        provs = mkModSubst
+              $ [ (mod_name, Module uid mod_name) | mod_name <- src_provs ] ++
+                [ (to, from_mod)
+                -- TODO: support package qualified reexport
+                | ModuleReexport Nothing from to <- src_reexports
+                , Just from_mod <- [ Map.lookup from (modShapeProvides linked_shape) ] ]
+        PackageIdentifier pkg_name pkg_ver = pkgid
+        -- TODO: reexport processing here
+        final_linked_shape = ModuleShape provs (modShapeRequires linked_shape)
+        pkg_map' = Map.insert cid (uid, final_linked_shape) pkg_map
+        linked_c = LinkedComponent {
+                        lc_uid = uid,
+                        lc_cid = cid,
+                        lc_pkgid = pkgid,
+                        lc_component = component,
+                        lc_shape = final_linked_shape,
+                        lc_includes = linked_includes,
+                        lc_depends = linked_deps
+                   }
+
+-- Now we go and actually instantiate based on the results of mix-in linking
+-- by repeatedly substituting.  In this absence of Backpack this is a no-op.
+instantiateComponents
+    :: Map ComponentId PackageId
+    -> [LinkedComponent]
+    -> [LinkedComponent]
+instantiateComponents pid_map components
+    = Map.elems (go (Map.elems cmap) Map.empty)
+  where
+    cmap = Map.fromList [ (lc_cid lc, lc) | lc <- components ]
+
+    go [] umap = umap
+    go (w:ws) umap
+        | Just _ <- Map.lookup (lc_uid w) umap
+        = go ws umap
+        | otherwise
+        = go (new_ws ++ ws) (Map.insert (lc_uid w) w umap)
+        where new_ws | Set.null (unitIdFreeHoles (lc_uid w))
+                     = concatMap (getLinked . fst) (lc_depends w)
+                     -- No new work items if it's indefinite...
+                     | otherwise
+                     = []
+
+    -- Given an (instantiated) unit ID, compute the LinkedComponent
+    -- which corresponds to it
+    getLinked (UnitIdVar _) = error "getLinked: var"
+    getLinked (SimpleUnitId cid)
+        | Just lc <- Map.lookup cid cmap = [lc]
+        -- We can't build it, so don't bother
+        | otherwise = []
+    getLinked (UnitId cid insts)
+        | Just lc0 <- Map.lookup cid cmap =
+            [ let lc = modSubst insts lc0
+                  getDep (Module uid@(UnitId cid _) _)
+                    | Just pid <- Map.lookup cid pid_map
+                    = [(uid, pid)]
+                  getDep (Module uid@(SimpleUnitId cid) _)
+                    | Just pid <- Map.lookup cid pid_map
+                    = [(uid, pid)]
+                  getDep _ = []
+              in lc { lc_depends = ordNub (concatMap getDep (Map.elems insts) ++ lc_depends lc) }
+            ]
+        -- We can't build it, so don't bother
+        | otherwise = []
+
+-- Build ComponentLocalBuildInfo for each component we are going
+-- to build.
+mkLinkedComponentsLocalBuildInfo
+    :: PackageDescription -- TODO: narrow this, or feed it in from
+                          -- when we generated component IDs
+    -> Compiler
+    -> [LinkedComponent]
+    -> [(ComponentLocalBuildInfo, [UnitId])]
+mkLinkedComponentsLocalBuildInfo pkg_descr comp lcs = map go lcs
+  where
+    internalUnits = Set.fromList (map lc_uid lcs)
+    isInternal x = Set.member x internalUnits
+    go lc =
+        let clbi = go' lc
+        in (clbi, filter isInternal (map fst (componentPackageDeps clbi)))
+    go' lc =
+      case lc_component lc of
+      CLib lib ->
+        let exports = map (\n -> Installed.ExposedModule n Nothing)
+                          (PD.exposedModules lib)
+        -- TODO: reexports
+        in LibComponentLocalBuildInfo {
+          componentPackageDeps = cpds,
+          componentUnitId = uid,
+          componentLocalName = cname,
+          componentIncludes = includes,
+          componentExposedModules = exports,
+          -- TODO: a bit dodgy
+          componentIsPublic = libName lib == display (packageName (package pkg_descr)),
+          componentCompatPackageKey = lc_compat_key lc comp,
+          componentCompatPackageName = lc_compat_name lc
+        }
+      CExe _ ->
+        ExeComponentLocalBuildInfo {
+          componentUnitId = uid,
+          componentLocalName = cname,
+          componentPackageDeps = cpds,
+          componentIncludes = includes
+        }
+      CTest _ ->
+        TestComponentLocalBuildInfo {
+          componentUnitId = uid,
+          componentLocalName = cname,
+          componentPackageDeps = cpds,
+          componentIncludes = includes
+        }
+      CBench _ ->
+        BenchComponentLocalBuildInfo {
+          componentUnitId = uid,
+          componentLocalName = cname,
+          componentPackageDeps = cpds,
+          componentIncludes = includes
+        }
+     where
+      uid = lc_uid lc
+      is_definite = Set.null (unitIdFreeHoles (lc_uid lc))
+      cname = componentName (lc_component lc)
+      cpds = if is_definite
+                then lc_depends lc
+                else map (\(uid, pid) -> (generalizeUnitId uid, pid)) (lc_depends lc)
+      includes = map (\(uid, provs) -> (uid, provs)) (lc_includes lc)
 
 
-topSortFromEdges :: Ord key => [(node, key, [key])]
-                            -> [(node, key, [key])]
-topSortFromEdges es =
-    let (graph, vertexToNode, _) = graphFromEdges es
-    in reverse (map vertexToNode (topSort graph))
-
-mkComponentsLocalBuildInfo :: ConfigFlags
+mkComponentsLocalBuildInfo :: Verbosity
+                           -> ConfigFlags
                            -> Compiler
                            -> InstalledPackageIndex
                            -> PackageDescription
                            -> [PackageId] -- internal package deps
                            -> [InstalledPackageInfo] -- external package deps
-                           -> [(Component, [ComponentName])]
+                           -> [Component]
                            -> FlagAssignment
                            -> IO [(ComponentLocalBuildInfo,
                                    [UnitId])]
-mkComponentsLocalBuildInfo cfg comp installedPackages pkg_descr
+mkComponentsLocalBuildInfo verbosity cfg comp installedPackages pkg_descr
                            internalPkgDeps externalPkgDeps
-                           graph flagAssignment =
-    foldM go [] graph
-  where
-    go z (component, dep_cnames) = do
-        clbi <- componentLocalBuildInfo z component
-        -- NB: We want to preserve cdeps because it contains extra
-        -- information like build-tools ordering
-        let dep_uids = [ componentUnitId dep_clbi
-                       | cname <- dep_cnames
-                       -- Being in z relies on topsort!
-                       , (dep_clbi, _) <- z
-                       , componentLocalName dep_clbi == cname ]
-        return ((clbi, dep_uids):z)
-
-    -- The allPkgDeps contains all the package deps for the whole package
-    -- but we need to select the subset for this specific component.
-    -- we just take the subset for the package names this component
-    -- needs. Note, this only works because we cannot yet depend on two
-    -- versions of the same package.
-    componentLocalBuildInfo :: [(ComponentLocalBuildInfo, [UnitId])]
-                            -> Component -> IO ComponentLocalBuildInfo
-    componentLocalBuildInfo internalComps component =
-      case component of
-      CLib lib -> do
-        let exports = map (\n -> Installed.ExposedModule n Nothing)
-                          (PD.exposedModules lib)
-            mb_reexports = resolveModuleReexports installedPackages
-                                                  (packageId pkg_descr)
-                                                  uid
-                                                  externalPkgDeps lib
-        reexports <- case mb_reexports of
-            Left problems -> reportModuleReexportProblems problems
-            Right r -> return r
-
-        return LibComponentLocalBuildInfo {
-          componentPackageDeps = cpds,
-          componentUnitId = uid,
-          componentLocalName = componentName component,
-          componentIsPublic = libName lib == display (packageName (package pkg_descr)),
-          componentCompatPackageKey = compat_key,
-          componentCompatPackageName = compat_name,
-          componentIncludes = includes,
-          componentExposedModules = exports ++ reexports
-        }
-      CExe _ ->
-        return ExeComponentLocalBuildInfo {
-          componentUnitId = uid,
-          componentLocalName = componentName component,
-          componentPackageDeps = cpds,
-          componentIncludes = includes
-        }
-      CTest _ ->
-        return TestComponentLocalBuildInfo {
-          componentUnitId = uid,
-          componentLocalName = componentName component,
-          componentPackageDeps = cpds,
-          componentIncludes = includes
-        }
-      CBench _ ->
-        return BenchComponentLocalBuildInfo {
-          componentUnitId = uid,
-          componentLocalName = componentName component,
-          componentPackageDeps = cpds,
-          componentIncludes = includes
-        }
-      where
-
-        -- TODO configIPID should have name changed
-        cid = computeComponentId (configIPID cfg) (package pkg_descr)
-                (componentName component)
-                (getDeps (componentName component))
-                flagAssignment
-        uid = SimpleUnitId cid
-        PackageIdentifier pkg_name pkg_ver = package pkg_descr
-        compat_name = computeCompatPackageName pkg_name (componentName component)
-        compat_key = computeCompatPackageKey comp compat_name pkg_ver uid
-
-        bi = componentBuildInfo component
-
-        lookupInternalPkg :: PackageId -> UnitId
-        lookupInternalPkg pkgid = do
-            let matcher (clbi, _)
-                    | CLibName str <- componentLocalName clbi
-                    , str == display (pkgName pkgid)
-                    = Just (componentUnitId clbi)
-                matcher _ = Nothing
-            case catMaybes (map matcher internalComps) of
-                [x] -> x
-                _ -> error "lookupInternalPkg"
-
-        cpds = if newPackageDepsBehaviour pkg_descr
-               then dedup $
-                    [ (Installed.installedUnitId pkg, packageId pkg)
-                    | pkg <- selectSubset bi externalPkgDeps ]
-                 ++ [ (lookupInternalPkg pkgid, pkgid)
-                    | pkgid <- selectSubset bi internalPkgDeps ]
-               else [ (Installed.installedUnitId pkg, packageId pkg)
-                    | pkg <- externalPkgDeps ]
-        includes = map (\(i,p) -> (i,lookupRenaming p cprns)) cpds
-        cprns = if newPackageDepsBehaviour pkg_descr
-                then targetBuildRenaming bi
-                else Map.empty
-
-    dedup = Map.toList . Map.fromList
-
-    -- TODO: this should include internal deps too
-    getDeps :: ComponentName -> [ComponentId]
-    getDeps cname =
-      let externalPkgs
-            = maybe [] (\lib -> selectSubset (componentBuildInfo lib)
-                                             externalPkgDeps)
-                       (lookupComponent pkg_descr cname)
-      in map Installed.installedComponentId externalPkgs
-
-    selectSubset :: Package pkg => BuildInfo -> [pkg] -> [pkg]
-    selectSubset bi pkgs =
-        [ pkg | pkg <- pkgs, packageName pkg `elem` names bi ]
-
-    names :: BuildInfo -> [PackageName]
-    names bi = [ name | Dependency name _ <- targetBuildDepends bi ]
+                           graph flagAssignment = do
+    let conf_pkg_map = Map.fromList
+            [(packageName pkg,
+               (Installed.installedComponentId pkg, Installed.sourcePackageId pkg))
+            | pkg <- externalPkgDeps]
+        graph1 = configureComponents cfg pkg_descr flagAssignment
+                 conf_pkg_map graph
+    -- Can't use wrap because it breaks our Doc formatting
+    when (verbosity >= verbose) . putStrLn . render $
+        vcat [ text "Configured component graph:"
+             , nest 4 (vcat
+                [ vcat [ hsep [ text "component", disp (cc_cid cc) ], nest 4 (vcat
+                    [ hsep $ [ text "include", disp cid, disp prov_rn ]
+                            ++ if isDefaultRenaming req_rn
+                                    then []
+                                    else [ text "requires", disp req_rn ]
+                    | (cid, _, (prov_rn, req_rn)) <- cc_includes cc
+                    ])]
+                | cc <- graph1 ]) ]
+    let shape_pkg_map = Map.fromList
+            [ (Installed.installedComponentId pkg,
+                (installedUnitId pkg, shapeInstalledPackage pkg))
+            | pkg <- externalPkgDeps]
+        graph2 = linkComponents shape_pkg_map graph1
+    when (verbosity >= verbose) . putStrLn . render $
+        vcat [ text "Linked component graph:"
+             , nest 4 $ vcat
+                [ hang (text "unit" <+> disp (lc_uid lc)) 4 $
+                    vcat [ text "include" <+> disp uid <+> disp prov_rn
+                         | (uid, prov_rn) <- lc_includes lc ]
+                    -- $+$ dispModSubst (modShapeProvides (lc_shape lc))
+                | lc <- graph2 ]
+             ]
+    let pid_map = Map.fromList $
+                [ (Installed.installedComponentId pkg, Installed.sourcePackageId pkg)
+                | pkg <- externalPkgDeps] ++
+                [ (cc_cid cc, cc_pkgid cc)
+                | cc <- graph1 ]
+        graph3 = instantiateComponents pid_map graph2
+        graph4 = PackageIndex.topologicalOrder (PackageIndex.fromList graph3)
+    when (verbosity >= verbose) . putStrLn . render $
+        vcat [ text "Instantiated component graph:"
+             , nest 4 $ vcat
+                [ hang (text (if Set.null (unitIdFreeHoles (lc_uid lc))
+                                then "definite"
+                                else "indefinite")
+                                                <+> text (hashUnitId (lc_uid lc))) 4 $
+                    vcat [ text "depends" <+> text (hashUnitId uid)
+                         | (uid, _) <- lc_depends lc ]
+                | lc <- graph4 ]
+             ]
+    let clbis = mkLinkedComponentsLocalBuildInfo pkg_descr comp graph4
+    -- forM clbis $ \(clbi,deps) -> info verbosity $ "UNIT" ++ hashUnitId (componentUnitId clbi) ++ "\n" ++ intercalate "\n" (map hashUnitId deps)
+    return clbis
 
 -- | Given the author-specified re-export declarations from the .cabal file,
 -- resolve them to the form that we need for the package database.

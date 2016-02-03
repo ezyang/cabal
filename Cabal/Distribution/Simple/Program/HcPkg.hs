@@ -159,7 +159,7 @@ writeRegistrationFileDirectly :: HcPkgInfo
                               -> IO ()
 writeRegistrationFileDirectly hpi (SpecificPackageDB dir) pkgInfo
   | supportsDirDbs hpi
-  = do let pkgfile = dir </> display (installedUnitId pkgInfo) <.> "conf"
+  = do let pkgfile = dir </> hashUnitId (installedUnitId pkgInfo) <.> "conf"
        writeUTF8File pkgfile (showInstalledPackageInfo pkgInfo)
 
   | otherwise

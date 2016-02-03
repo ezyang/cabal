@@ -56,14 +56,14 @@ import Distribution.System
 import Distribution.Text
 import Distribution.Verbosity
 
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.List
          ( intersect )
+import qualified Data.Map as Map
 import Control.Monad
-         ( when, unless )
+         ( when, unless, forM_ )
 import System.FilePath
-         ( (</>), (<.>) )
+         ( (</>), (<.>), takeDirectory )
 import System.Directory
          ( getCurrentDirectory )
 
@@ -217,6 +217,7 @@ buildComponent verbosity numJobs pkg_descr lbi suffixes
         installedPkgInfo = inplaceInstalledPackageInfo pwd distPref pkg_descr
                                                        (AbiHash "") lib' lbi clbi
 
+    debug verbosity $ "Registering inplace:\n" ++ (IPI.showInstalledPackageInfo installedPkgInfo)
     registerPackage verbosity (compiler lbi) (withPrograms lbi) HcPkg.MultiInstance
                     (withPackageDB lbi) installedPkgInfo
 
@@ -446,8 +447,7 @@ testSuiteLibV09AsLibAndExe pkg_descr
             buildInfo  = (testBuildInfo test) {
                            hsSourceDirs       = [ testDir ],
                            targetBuildDepends = testLibDep
-                             : (targetBuildDepends $ testBuildInfo test),
-                           targetBuildRenaming = Map.empty
+                             : (targetBuildDepends $ testBuildInfo test)
                          }
           }
     -- | The stub executable needs a new 'ComponentLocalBuildInfo'
@@ -579,6 +579,16 @@ writeAutogenFiles verbosity pkg lbi clbi = do
   let pathsModulePath = autogenModulesDir lbi clbi
                     </> ModuleName.toFilePath (autogenModuleName pkg) <.> "hs"
   rewriteFile pathsModulePath (Build.PathsModule.generate pkg lbi clbi)
+
+  case componentUnitId clbi of
+    UnitId _ insts ->
+        -- Harmless enough to do things even when they exist
+        forM_ (Map.keys insts) $ \mod_name -> do
+            let sigPath = autogenModulesDir lbi clbi
+                      </> ModuleName.toFilePath mod_name <.> "hsig"
+            createDirectoryIfMissingVerbose verbosity True (takeDirectory sigPath)
+            rewriteFile sigPath $ "module " ++ display mod_name ++ " where"
+    _ -> return ()
 
   let cppHeaderPath = autogenModulesDir lbi clbi </> cppHeaderName
   rewriteFile cppHeaderPath (Build.Macros.generate pkg lbi clbi)

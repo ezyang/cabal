@@ -147,7 +147,9 @@ preprocessComponent :: PackageDescription
 preprocessComponent pd comp lbi clbi isSrcDist verbosity handlers = case comp of
   (CLib lib@Library{ libBuildInfo = bi }) -> do
     let dirs = hsSourceDirs bi ++ [autogenModulesDir lbi clbi]
-    setupMessage verbosity "Preprocessing library" (packageId pd)
+        extra | componentIsPublic clbi = ""
+              | otherwise = " '" ++ hashUnitId (componentUnitId clbi) ++ "' for"
+    setupMessage verbosity ("Preprocessing library" ++ extra) (packageId pd)
     forM_ (map ModuleName.toFilePath $ libModules lib) $
       pre dirs (buildDir lbi) (localHandlers bi)
   (CExe exe@Executable { buildInfo = bi, exeName = nm }) -> do

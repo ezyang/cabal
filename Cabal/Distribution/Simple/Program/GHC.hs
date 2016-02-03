@@ -80,6 +80,9 @@ data GhcOptions = GhcOptions {
   -- (we need to handle backwards compatibility.)
   ghcOptThisUnitId   :: Flag String,
 
+  -- | No code? (But we turn on interface writing
+  ghcOptNoCode :: Flag Bool,
+
   -- | GHC package databases to use, the @ghc -package-conf@ flag.
   ghcOptPackageDBs    :: PackageDBStack,
 
@@ -388,6 +391,8 @@ renderGhcOptions comp _platform@(Platform _arch os) opts
                   | otherwise                -> "-package-name"
              , this_arg ]
              | this_arg <- flag ghcOptThisUnitId ]
+
+  , concat [ ["-fno-code", "-fwrite-interface"] | flagBool ghcOptNoCode ]
 
   , [ "-hide-all-packages"     | flagBool ghcOptHideAllPackages ]
   , [ "-no-auto-link-packages" | flagBool ghcOptNoAutoLinkPackages ]

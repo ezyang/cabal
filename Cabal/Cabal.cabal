@@ -270,6 +270,8 @@ library
                  -Wnoncanonical-monadfail-instances
 
   exposed-modules:
+    Distribution.Backpack
+    Distribution.ModuleShaping
     Distribution.Compat.CreatePipe
     Distribution.Compat.Environment
     Distribution.Compat.Exception
@@ -343,6 +345,8 @@ library
     Distribution.TestSuite
     Distribution.Text
     Distribution.Utils.NubList
+    Distribution.Utils.UnionFind
+    Distribution.Utils.Base62
     Distribution.Verbosity
     Distribution.Version
     Language.Haskell.Extension

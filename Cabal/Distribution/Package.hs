@@ -25,6 +25,7 @@ module Distribution.Package (
         -- * Package keys/installed package IDs (used for linker symbols)
         ComponentId(..),
         UnitId(..),
+        hashUnitId,
         mkUnitId,
         mkLegacyUnitId,
         getHSLibraryName,
@@ -32,6 +33,10 @@ module Distribution.Package (
 
         -- * Modules
         Module(..),
+        ModuleSubst,
+        modSubstToList,
+        mkModSubst,
+        dispModSubst,
 
         -- * ABI hash
         AbiHash(..),
@@ -59,6 +64,7 @@ import Distribution.Compat.ReadP
 import Distribution.Compat.Binary
 import Distribution.Text
 import Distribution.ModuleName
+import Distribution.Utils.Base62
 
 import Control.DeepSeq (NFData(..))
 import qualified Data.Char as Char
@@ -66,6 +72,8 @@ import qualified Data.Char as Char
 import Data.Data ( Data )
 import Data.List ( intercalate )
 import Data.Typeable ( Typeable )
+import Data.Map ( Map )
+import qualified Data.Map as Map
 import GHC.Generics (Generic)
 import Text.PrettyPrint ((<>), (<+>), text)
 
@@ -123,9 +131,12 @@ instance NFData PackageIdentifier where
 -- There are a few cases where Cabal needs to know about
 -- module identities, e.g., when writing out reexported modules in
 -- the 'InstalledPackageInfo'.
-data Module =
-    Module { moduleUnitId :: UnitId,
-             moduleName :: ModuleName }
+--
+-- In GHC, this is just a 'Module' constructor for backwards
+-- compatibility reasons, but in Cabal we can do it properly.
+data Module
+    = Module UnitId ModuleName
+    | ModuleVar ModuleName
     deriving (Generic, Read, Show, Eq, Ord, Typeable, Data)
 
 instance Binary Module
@@ -133,14 +144,21 @@ instance Binary Module
 instance Text Module where
     disp (Module uid mod_name) =
         disp uid <> Disp.text ":" <> disp mod_name
+    disp (ModuleVar mod_name) =
+        Disp.text "hole:" <> disp mod_name
     parse = do
-        uid <- parse
+        mb_uid <- ((Parse.string "hole" >> return Nothing)
+                    <++
+                   (fmap Just parse))
         _ <- Parse.char ':'
         mod_name <- parse
-        return (Module uid mod_name)
+        return $ case mb_uid of
+            Nothing ->  ModuleVar mod_name
+            Just uid -> Module uid mod_name
 
 instance NFData Module where
     rnf (Module uid mod_name) = rnf uid `seq` rnf mod_name
+    rnf (ModuleVar mod_name) = rnf mod_name
 
 -- | A 'ComponentId' uniquely identifies the transitive source
 -- code closure of a component.  For non-Backpack components, it also
@@ -166,12 +184,84 @@ instance NFData ComponentId where
 
 -- | Returns library name prefixed with HS, suitable for filenames
 getHSLibraryName :: UnitId -> String
-getHSLibraryName (SimpleUnitId (ComponentId s)) = "HS" ++ s
+getHSLibraryName (UnitIdVar _) = error "getHSLibraryName: unbound variable"
+getHSLibraryName uid = "HS" ++ hashUnitId uid
+
+-- | An explicit substitution on modules.  More functions dealing
+-- with this are in 'Backpack'.
+--
+-- NB: These substitutions are NOT idempotent, for example, a
+-- valid substitution is (A -> B, B -> A).
+type ModuleSubst = Map ModuleName Module
+
+mkModSubst :: [(ModuleName, Module)] -> ModuleSubst
+mkModSubst = Map.fromList
+
+modSubstToList :: ModuleSubst -> [(ModuleName, Module)]
+modSubstToList = Map.toAscList
+
+dispModSubst :: ModuleSubst -> Disp.Doc
+dispModSubst subst
+    = Disp.brackets . Disp.hcat
+    . Disp.punctuate Disp.comma
+    $ [ disp k <> Disp.char '=' <> disp v | (k,v) <- Map.toAscList subst ]
+
+parseModSubst :: ReadP r ModuleSubst
+parseModSubst = Parse.between (Parse.char '[') (Parse.char ']')
+      . fmap mkModSubst
+      . flip Parse.sepBy (Parse.char ',')
+      $ do k <- parse
+           _ <- Parse.char '='
+           v <- parse
+           return (k, v)
 
 -- | For now, there is no distinction between component IDs
 -- and unit IDs in Cabal.
-newtype UnitId = SimpleUnitId ComponentId
-    deriving (Generic, Read, Show, Eq, Ord, Typeable, Data, Binary, Text, NFData)
+data UnitId = SimpleUnitId ComponentId
+            -- ^ Equivalent to @'UnitId' cid Map.empty@
+            | UnitId ComponentId ModuleSubst
+            | UnitIdVar !Int -- de Bruijn indexed
+    deriving (Generic, Read, Show, Eq, Ord, Typeable, Data)
+
+-- Here because we need it for getHSLibraryName
+-- TODO: this is pretty inefficient!
+-- TODO: write a spec for this, because we want this synchronized
+-- with GHC
+hashUnitId :: UnitId -> String
+hashUnitId (SimpleUnitId cid) = display cid
+hashUnitId (UnitIdVar i)      = show i -- this is never bare
+hashUnitId (UnitId cid subst)
+  | all (\(k, v) -> v == ModuleVar k) (modSubstToList subst)
+     = display cid
+  | otherwise
+     = (\h -> display cid ++ "-" ++ h)
+     . hashToBase62 $
+        -- Similar to 'computeComponentId', it is safest to
+        -- include the cid in the hash
+           display cid ++ "\n" ++
+           concat [ display mod_name ++ "=" ++ hashUnitId uid ++ ":" ++ display m  ++ "\n"
+                  | (mod_name, Module uid m) <- modSubstToList subst]
+
+instance Binary UnitId
+
+instance NFData UnitId where
+    rnf (SimpleUnitId cid) = rnf cid
+    rnf (UnitId cid insts) = rnf cid `seq` rnf insts
+    rnf (UnitIdVar i) = rnf i
+
+instance Text UnitId where
+    disp (SimpleUnitId cid) = disp cid
+    disp (UnitIdVar i) = Disp.char '?' <> Disp.int i
+    disp (UnitId cid insts) = disp cid <> dispModSubst insts
+
+    parse = parseUnitIdVar <++ parseUnitId <++ parseSimpleUnitId
+      where
+        parseUnitIdVar = do _ <- Parse.char '?'
+                            fmap UnitIdVar (readS_to_P reads)
+        parseUnitId = do cid <- parse
+                         insts <- parseModSubst
+                         return (UnitId cid insts)
+        parseSimpleUnitId = fmap SimpleUnitId parse
 
 -- | Makes a simple-style UnitId from a string.
 mkUnitId :: String -> UnitId

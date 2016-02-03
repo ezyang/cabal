@@ -392,10 +392,10 @@ initialPathTemplateEnv pkgId libname compiler platform =
   ++ abiTemplateEnv compiler platform
 
 packageTemplateEnv :: PackageIdentifier -> UnitId -> PathTemplateEnv
-packageTemplateEnv pkgId libname =
+packageTemplateEnv pkgId uid =
   [(PkgNameVar,  PathTemplate [Ordinary $ display (packageName pkgId)])
   ,(PkgVerVar,   PathTemplate [Ordinary $ display (packageVersion pkgId)])
-  ,(LibNameVar,  PathTemplate [Ordinary $ display libname])
+  ,(LibNameVar,  PathTemplate [Ordinary $ hashUnitId uid])
   ,(PkgIdVar,    PathTemplate [Ordinary $ display pkgId])
   ]
 

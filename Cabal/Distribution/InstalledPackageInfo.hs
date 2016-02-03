@@ -53,6 +53,7 @@ import Distribution.Compat.Binary
 import Text.PrettyPrint as Disp
 import Data.Maybe   (fromMaybe)
 import GHC.Generics (Generic)
+import qualified Data.Char as Char
 
 -- -----------------------------------------------------------------------------
 -- The InstalledPackageInfo type
@@ -103,6 +104,8 @@ data InstalledPackageInfo
 installedComponentId :: InstalledPackageInfo -> ComponentId
 installedComponentId ipi = case installedUnitId ipi of
                             SimpleUnitId cid -> cid
+                            UnitId cid _ -> cid
+                            UnitIdVar _ -> error "installedComponentId: UnitIdVar"
 
 {-# DEPRECATED installedPackageId "Use installedUnitId instead" #-}
 -- | Backwards compatibility with Cabal pre-1.24.
@@ -223,6 +226,10 @@ showInstalledPackageInfoField = showSingleNamedField fieldsInstalledPackageInfo
 showSimpleInstalledPackageInfoField :: String -> Maybe (InstalledPackageInfo -> String)
 showSimpleInstalledPackageInfoField = showSimpleSingleNamedField fieldsInstalledPackageInfo
 
+dispCompatPackageKey = text
+parseCompatPackageKey = Parse.munch1 uid_char
+    where uid_char c = Char.isAlphaNum c || c `elem` "-_.=[],:"
+
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
 
@@ -240,9 +247,8 @@ basicFieldDescrs =
  , simpleField "id"
                            disp                   parse
                            installedUnitId             (\pk pkg -> pkg{installedUnitId=pk})
- -- NB: parse these as component IDs
  , simpleField "key"
-                           (disp . ComponentId)   (fmap (\(ComponentId s) -> s) parse)
+                           dispCompatPackageKey   parseCompatPackageKey
                            compatPackageKey       (\pk pkg -> pkg{compatPackageKey=pk})
  , simpleField "license"
                            disp                   parseLicenseQ
