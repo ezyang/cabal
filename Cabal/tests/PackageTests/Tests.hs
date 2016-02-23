@@ -527,6 +527,21 @@ tests config = do
       cabal "build" []
       runExe' "exe" [] >>= assertOutputContains "fromList [(0,2),(2,4)]"
 
+  tc "Backpack/Includes3" $ do
+      cabal "configure" []
+      cabal "build" []
+      -- TODO: refactorize
+      pkg_dir <- packageDir
+      _ <- run (Just pkg_dir) "touch" ["indef/Foo.hs"]
+      cabal "build" []
+      runExe' "exe" [] >>= assertOutputContains "fromList [(0,2),(2,4)]"
+
+  tc "Backpack/Includes4" $ do
+      cabal "configure" []
+      cabal "build" []
+      runExe' "exe" [] >>= assertOutputContains "A (B (A (B"
+
+  
   where
     ghc_pkg_guess bin_name = do
         cwd <- packageDir
