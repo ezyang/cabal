@@ -1626,6 +1626,7 @@ data ConfiguredComponent
         -- The package this component came from.
         cc_pkgid :: PackageId,
         cc_component :: Component,
+        cc_internal_build_tools :: [ComponentId],
         -- Not resolved yet; component configuration only looks at ComponentIds.
         cc_includes :: [(ComponentId, PackageId, (ModuleRenaming, ModuleRenaming))]
       }
@@ -1639,12 +1640,13 @@ configureComponents
     -> PackageDescription
     -> FlagAssignment
     -> Map PackageName (ComponentId, PackageId)
+    -> Map String ComponentId
     -> [Component]
     -> [ConfiguredComponent]
-configureComponents cfg pkg_descr flagAssignment pkg_map0 components
-    = snd (mapAccumL go pkg_map0 components)
+configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 components
+    = snd (mapAccumL go (pkg_map0, exe_map0) components)
   where
-    go pkg_map component = (pkg_map', conf)
+    go (pkg_map, exe_map) component = ((pkg_map', exe_map'), conf)
       where bi = componentBuildInfo component
             deps = [ (cid, pkgid)
                    | Dependency name _ <- targetBuildDepends bi
@@ -1652,6 +1654,9 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 components
             -- The includes are based off of 'backpack-includes', but we
             -- also fill in a default, implicit include, for everything
             -- that is in 'build-depends' but not in 'backpack-includes'.
+            btools = [ cid
+                     | Dependency (PackageName name) _ <- buildTools bi
+                     , Just cid <- [ Map.lookup name exe_map ] ]
             includes0 = [ (cid, pid, rns)
                         | (name, rns) <- backpackIncludes bi
                         , Just (cid, pid) <- [ Map.lookup name pkg_map ] ]
@@ -1666,10 +1671,15 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 components
                 | CLibName str <- componentName component
                 = Map.insert (PackageName str) (cid, package pkg_descr) pkg_map
                 | otherwise = pkg_map
+            exe_map'
+                | CExeName str <- componentName component
+                = Map.insert str cid exe_map
+                | otherwise = exe_map
             conf = ConfiguredComponent {
                     cc_cid = cid,
                     cc_pkgid = package pkg_descr,
                     cc_component = component,
+                    cc_internal_build_tools = btools,
                     cc_includes = includes
                    }
 
@@ -1682,6 +1692,8 @@ data LinkedComponent
         lc_cid :: ComponentId,
         lc_component :: Component,
         lc_shape :: ModuleShape,
+        -- | Local buildTools dependencies
+        lc_internal_build_tools :: [UnitId],
         lc_includes :: [(UnitId, ModuleRenaming)],
         -- PackageId here is a bit dodgy, but its just for
         -- BC so it shouldn't matter.
@@ -1739,6 +1751,7 @@ linkComponents pkg_map0 components
       cc_cid = cid,
       cc_pkgid = pkgid,
       cc_component = component,
+      cc_internal_build_tools = btools,
       cc_includes = cid_includes
     } = (pkg_map', linked_c)
       where
@@ -1798,6 +1811,8 @@ linkComponents pkg_map0 components
                         lc_cid = cid,
                         lc_pkgid = pkgid,
                         lc_component = component,
+                        -- These must be executables
+                        lc_internal_build_tools = map SimpleUnitId btools,
                         lc_shape = final_linked_shape,
                         lc_includes = linked_includes,
                         lc_depends = linked_deps
@@ -1862,7 +1877,8 @@ mkLinkedComponentsLocalBuildInfo pkg_descr comp lcs = map go lcs
     isInternal x = Set.member x internalUnits
     go lc =
         let clbi = go' lc
-        in (clbi, filter isInternal (map fst (componentPackageDeps clbi)))
+        in (clbi, filter isInternal (map fst (componentPackageDeps clbi))
+               ++ lc_internal_build_tools lc)
     go' lc =
       case lc_component lc of
       CLib lib ->
@@ -1910,6 +1926,11 @@ mkLinkedComponentsLocalBuildInfo pkg_descr comp lcs = map go lcs
                 else map (\(uid, pid) -> (generalizeUnitId uid, pid)) (lc_depends lc)
       includes = map (\(uid, provs) -> (uid, provs)) (lc_includes lc)
 
+topSortFromEdges :: Ord key => [(node, key, [key])]
+                            -> [(node, key, [key])]
+topSortFromEdges es =
+    let (graph, vertexToNode, _) = graphFromEdges es
+    in reverse (map vertexToNode (topSort graph))
 
 mkComponentsLocalBuildInfo :: Verbosity
                            -> ConfigFlags
@@ -1930,7 +1951,7 @@ mkComponentsLocalBuildInfo verbosity cfg comp installedPackages pkg_descr
                (Installed.installedComponentId pkg, Installed.sourcePackageId pkg))
             | pkg <- externalPkgDeps]
         graph1 = configureComponents cfg pkg_descr flagAssignment
-                 conf_pkg_map graph
+                 conf_pkg_map Map.empty graph
     -- Can't use wrap because it breaks our Doc formatting
     when (verbosity >= verbose) . putStrLn . render $
         vcat [ text "Configured component graph:"
