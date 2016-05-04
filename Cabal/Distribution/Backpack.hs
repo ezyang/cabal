@@ -36,7 +36,7 @@ data ModuleShape = ModuleShape {
 
 moduleFreeHoles :: Module -> Set ModuleName
 moduleFreeHoles (ModuleVar mod_name) = Set.singleton mod_name
-moduleFreeHoles (Module uid n) = unitIdFreeHoles uid
+moduleFreeHoles (Module uid _n) = unitIdFreeHoles uid
 
 unitIdFreeHoles :: UnitId -> Set ModuleName
 unitIdFreeHoles (UnitId _ insts) = substFreeHoles insts
@@ -207,7 +207,7 @@ instance Applicative (UnifyM s) where
     pure = UnifyM . pure . pure
     UnifyM f <*> UnifyM x = UnifyM $ \r -> f r <*> x r
 instance Monad (UnifyM s) where
-    return = UnifyM . return . return
+    return = pure
     UnifyM m >>= f = UnifyM $ \r -> m r >>= \x -> unUnifyM (f x) r
 
 liftST :: ST s a -> UnifyM s a
