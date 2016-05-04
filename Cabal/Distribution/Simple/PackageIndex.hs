@@ -662,6 +662,7 @@ moduleNameIndex index =
     IPI.ExposedModule m reexport <- IPI.exposedModules pkg
     case reexport of
         Nothing -> return (m, [pkg])
+        Just (ModuleVar _) -> []
         Just (Module _ m') | m == m'   -> []
                            | otherwise -> return (m', [pkg])
         -- The heuristic is this: we want to prefer the original package

@@ -94,13 +94,13 @@ import Control.Exception
     ( Exception, evaluate, throw, throwIO, try )
 import Control.Exception ( ErrorCall )
 import Control.Monad
-    ( liftM, when, unless, foldM, filterM, mplus, forM )
+    ( liftM, when, unless, foldM, filterM, mplus )
 import Distribution.Compat.Binary ( decodeOrFailIO, encode )
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Lazy.Char8 as BLC8
 import Data.List
-    ( (\\), nub, partition, isPrefixOf, inits, stripPrefix, sort )
+    ( (\\), nub, partition, isPrefixOf, inits, stripPrefix )
 import Data.Maybe
     ( isNothing, catMaybes, fromMaybe, mapMaybe, isJust )
 import Data.Either
@@ -126,7 +126,6 @@ import Distribution.Text
 import Text.PrettyPrint
     ( Doc, (<>), (<+>), ($+$), char, comma, empty, hsep, nest
     , punctuate, quotes, render, renderStyle, sep, text, vcat, hang )
-import qualified Text.PrettyPrint as Disp
 import Distribution.Compat.Environment ( lookupEnv )
 import Distribution.Compat.Exception ( catchExit, catchIO )
 
@@ -1615,8 +1614,10 @@ computeCompatPackageKey comp pkg_name pkg_version (SimpleUnitId (ComponentId str
             rehashed_key = hashToBase62 str
         in fromMaybe rehashed_key (mb_verbatim_key `mplus` mb_truncated_key)
     | otherwise = str
-computeCompatPackageKey comp pkg_name pkg_version uid@UnitId{}
+computeCompatPackageKey _comp _pkg_name _pkg_version uid@UnitId{}
     = display uid
+computeCompatPackageKey _comp _pkg_name _pkg_version UnitIdVar{}
+    = error "computeCompatPackageKey: top-level UnitIdVar"
 
 -- | A configured component, we know exactly what its 'ComponentId' is,
 -- and the 'ComponentId's of the things it depends on.
@@ -1643,8 +1644,8 @@ configureComponents
     -> Map String ComponentId
     -> [Component]
     -> [ConfiguredComponent]
-configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 components
-    = snd (mapAccumL go (pkg_map0, exe_map0) components)
+configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 comps
+    = snd (mapAccumL go (pkg_map0, exe_map0) comps)
   where
     go (pkg_map, exe_map) component = ((pkg_map', exe_map'), conf)
       where bi = componentBuildInfo component
@@ -1664,19 +1665,19 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 components
             includes1 = map (\(cid, pid) -> (cid, pid, (defaultRenaming, defaultRenaming)))
                       $ filter (flip Set.notMember used_includes . fst) deps
             includes = includes0 ++ includes1
-            cid = computeComponentId (configIPID cfg) (package pkg_descr)
-                    (componentName component)
-                    (map fst deps) flagAssignment
+            this_cid = computeComponentId (configIPID cfg) (package pkg_descr)
+                        (componentName component)
+                        (map fst deps) flagAssignment
             pkg_map'
                 | CLibName str <- componentName component
-                = Map.insert (PackageName str) (cid, package pkg_descr) pkg_map
+                = Map.insert (PackageName str) (this_cid, package pkg_descr) pkg_map
                 | otherwise = pkg_map
             exe_map'
                 | CExeName str <- componentName component
-                = Map.insert str cid exe_map
+                = Map.insert str this_cid exe_map
                 | otherwise = exe_map
             conf = ConfiguredComponent {
-                    cc_cid = cid,
+                    cc_cid = this_cid,
                     cc_pkgid = package pkg_descr,
                     cc_component = component,
                     cc_internal_build_tools = btools,
@@ -1744,11 +1745,11 @@ linkComponents
     :: Map ComponentId (UnitId, ModuleShape)
     -> [ConfiguredComponent]
     -> [LinkedComponent]
-linkComponents pkg_map0 components
-    = snd (mapAccumL go pkg_map0 components)
+linkComponents pkg_map0 comps
+    = snd (mapAccumL go pkg_map0 comps)
   where
     go pkg_map ConfiguredComponent{
-      cc_cid = cid,
+      cc_cid = this_cid,
       cc_pkgid = pkgid,
       cc_component = component,
       cc_internal_build_tools = btools,
@@ -1793,22 +1794,21 @@ linkComponents pkg_map0 components
         -- TODO: need a lot more sanity checks, and error reporting
         reqs = modShapeRequires linked_shape
         -- check that there aren't pre-filled requirements...
-        uid = if Set.null reqs
-                then SimpleUnitId cid
-                else UnitId cid (Map.fromSet ModuleVar reqs)
+        this_uid = if Set.null reqs
+                    then SimpleUnitId this_cid
+                    else UnitId this_cid (Map.fromSet ModuleVar reqs)
         provs = mkModSubst
-              $ [ (mod_name, Module uid mod_name) | mod_name <- src_provs ] ++
+              $ [ (mod_name, Module this_uid mod_name) | mod_name <- src_provs ] ++
                 [ (to, from_mod)
                 -- TODO: support package qualified reexport
                 | ModuleReexport Nothing from to <- src_reexports
                 , Just from_mod <- [ Map.lookup from (modShapeProvides linked_shape) ] ]
-        PackageIdentifier pkg_name pkg_ver = pkgid
         -- TODO: reexport processing here
         final_linked_shape = ModuleShape provs (modShapeRequires linked_shape)
-        pkg_map' = Map.insert cid (uid, final_linked_shape) pkg_map
+        pkg_map' = Map.insert this_cid (this_uid, final_linked_shape) pkg_map
         linked_c = LinkedComponent {
-                        lc_uid = uid,
-                        lc_cid = cid,
+                        lc_uid = this_uid,
+                        lc_cid = this_cid,
                         lc_pkgid = pkgid,
                         lc_component = component,
                         -- These must be executables
@@ -1824,10 +1824,10 @@ instantiateComponents
     :: Map ComponentId PackageId
     -> [LinkedComponent]
     -> [LinkedComponent]
-instantiateComponents pid_map components
+instantiateComponents pid_map comps
     = Map.elems (go (Map.elems cmap) Map.empty)
   where
-    cmap = Map.fromList [ (lc_cid lc, lc) | lc <- components ]
+    cmap = Map.fromList [ (lc_cid lc, lc) | lc <- comps ]
 
     go [] umap = umap
     go (w:ws) umap
@@ -1844,12 +1844,12 @@ instantiateComponents pid_map components
     -- Given an (instantiated) unit ID, compute the LinkedComponent
     -- which corresponds to it
     getLinked (UnitIdVar _) = error "getLinked: var"
-    getLinked (SimpleUnitId cid)
-        | Just lc <- Map.lookup cid cmap = [lc]
+    getLinked (SimpleUnitId this_cid)
+        | Just lc <- Map.lookup this_cid cmap = [lc]
         -- We can't build it, so don't bother
         | otherwise = []
-    getLinked (UnitId cid insts)
-        | Just lc0 <- Map.lookup cid cmap =
+    getLinked (UnitId this_cid insts)
+        | Just lc0 <- Map.lookup this_cid cmap =
             [ let lc = modSubst insts lc0
                   getDep (Module uid@(UnitId cid _) _)
                     | Just pid <- Map.lookup cid pid_map
@@ -1887,7 +1887,7 @@ mkLinkedComponentsLocalBuildInfo pkg_descr comp lcs = map go lcs
         -- TODO: reexports
         in LibComponentLocalBuildInfo {
           componentPackageDeps = cpds,
-          componentUnitId = uid,
+          componentUnitId = this_uid,
           componentLocalName = cname,
           componentIncludes = includes,
           componentExposedModules = exports,
@@ -1898,28 +1898,28 @@ mkLinkedComponentsLocalBuildInfo pkg_descr comp lcs = map go lcs
         }
       CExe _ ->
         ExeComponentLocalBuildInfo {
-          componentUnitId = uid,
+          componentUnitId = this_uid,
           componentLocalName = cname,
           componentPackageDeps = cpds,
           componentIncludes = includes
         }
       CTest _ ->
         TestComponentLocalBuildInfo {
-          componentUnitId = uid,
+          componentUnitId = this_uid,
           componentLocalName = cname,
           componentPackageDeps = cpds,
           componentIncludes = includes
         }
       CBench _ ->
         BenchComponentLocalBuildInfo {
-          componentUnitId = uid,
+          componentUnitId = this_uid,
           componentLocalName = cname,
           componentPackageDeps = cpds,
           componentIncludes = includes
         }
      where
-      uid = lc_uid lc
-      is_definite = Set.null (unitIdFreeHoles (lc_uid lc))
+      this_uid = lc_uid lc
+      is_definite = Set.null (unitIdFreeHoles this_uid)
       cname = componentName (lc_component lc)
       cpds = if is_definite
                 then lc_depends lc
