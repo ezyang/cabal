@@ -576,7 +576,7 @@ configure (pkg_descr0', pbi) cfg = do
         Left  componentCycle -> reportComponentCycle componentCycle
         Right comps          ->
           mkComponentsLocalBuildInfo verbosity cfg comp packageDependsIndex pkg_descr
-                                     internalPkgDeps externalPkgDeps
+                                     externalPkgDeps
                                      (map fst comps) (configConfigurationsFlags cfg)
 
     -- Decide if we're going to compile with split objects.
@@ -1937,14 +1937,13 @@ mkComponentsLocalBuildInfo :: Verbosity
                            -> Compiler
                            -> InstalledPackageIndex
                            -> PackageDescription
-                           -> [PackageId] -- internal package deps
                            -> [InstalledPackageInfo] -- external package deps
                            -> [Component]
                            -> FlagAssignment
                            -> IO [(ComponentLocalBuildInfo,
                                    [UnitId])]
 mkComponentsLocalBuildInfo verbosity cfg comp installedPackages pkg_descr
-                           internalPkgDeps externalPkgDeps
+                           externalPkgDeps
                            graph flagAssignment = do
     let conf_pkg_map = Map.fromList
             [(packageName pkg,
