@@ -1642,11 +1642,13 @@ configureComponents
     :: ConfigFlags
     -> PackageDescription
     -> FlagAssignment
+    -- Purely to get the old dependency behavior
+    -> [InstalledPackageInfo]
     -> Map PackageName [(ComponentId, PackageId)]
     -> Map String ComponentId
     -> [Component]
     -> [ConfiguredComponent]
-configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 comps
+configureComponents cfg pkg_descr flagAssignment legacyExternalPkgDeps pkg_map0 exe_map0 comps
     = snd (mapAccumL go (pkg_map0, exe_map0) comps)
   where
     go (pkg_map, exe_map) component = ((pkg_map', exe_map'), conf)
@@ -1658,10 +1660,14 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 comps
             -- which is incompatible with the version of pkg_descr,
             -- then we are obliged to use the EXTERNAL copy of
             -- the library.
-            deps = [ (cid, pkgid)
+            deps | newPackageDepsBehaviour pkg_descr
+                 = [ (cid, pkgid)
                    | Dependency name reqVer <- targetBuildDepends bi
                    , (cid, pkgid) <- concat (Map.lookup name pkg_map)
                    , packageVersion pkgid `withinRange` reqVer ]
+                 | otherwise
+                 = [ (Installed.installedComponentId pkg, packageId pkg)
+                   | pkg <- legacyExternalPkgDeps ]
             -- The includes are based off of 'backpack-includes', but we
             -- also fill in a default, implicit include, for everything
             -- that is in 'build-depends' but not in 'backpack-includes'.
@@ -1961,7 +1967,7 @@ mkComponentsLocalBuildInfo verbosity cfg comp installedPackages pkg_descr
             [(packageName pkg,
                [(Installed.installedComponentId pkg, Installed.sourcePackageId pkg)])
             | pkg <- externalPkgDeps]
-        graph1 = configureComponents cfg pkg_descr flagAssignment
+        graph1 = configureComponents cfg pkg_descr flagAssignment externalPkgDeps
                  conf_pkg_map Map.empty graph
     -- Can't use wrap because it breaks our Doc formatting
     when (verbosity >= verbose) . putStrLn . render $
