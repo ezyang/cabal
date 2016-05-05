@@ -957,7 +957,8 @@ configureFinalizedPackage verbosity cfg
 checkCompilerProblems :: Compiler -> PackageDescription -> IO ()
 checkCompilerProblems comp pkg_descr = do
     unless (renamingPackageFlagsSupported comp ||
-                any (not . null . backpackIncludes) (allBuildInfo pkg_descr)) $
+                all (all ((\(provs, reqs) -> isDefaultRenaming provs && isDefaultRenaming reqs) . snd) . backpackIncludes)
+                         (allBuildInfo pkg_descr)) $
         die $ "Your compiler does not support thinning and renaming on "
            ++ "package flags.  To use this feature you probably must use "
            ++ "GHC 7.9 or later."
