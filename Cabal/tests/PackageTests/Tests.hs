@@ -505,7 +505,7 @@ tests config = do
       cabal "register" ["--assume-deps-up-to-date", "RegisterAssumeDepsUpToDate", "--gen-pkg-config=" ++ main_reg]
       ghcPkg "register" [pkg_dir </> main_reg]
 
-  tc "Backpack/Includes1" $ do
+  tc "Backpack/Includes1" . whenGhcVersion (>= Version [8,1] []) $ do
       cabal "configure" []
       r <- shouldFail $ cabal' "build" []
       assertBool "error should be in B.hs" $
@@ -513,12 +513,12 @@ tests config = do
       assertBool "error should be \"Could not find module Data.Set\"" $
           resultOutput r =~ "(Could not find module|Failed to load interface).*Data.Set"
 
-  tc "Backpack/Includes2" $ do
+  tc "Backpack/Includes2" . whenGhcVersion (>= Version [8,1] []) $ do
       cabal "configure" []
       cabal "build" []
       runExe' "exe" [] >>= assertOutputContains "minemysql minepostgresql"
 
-  tc "Backpack/Includes3" $ do
+  tc "Backpack/Includes3" . whenGhcVersion (>= Version [8,1] []) $ do
       cabal "configure" []
       cabal "build" []
       -- TODO: refactorize
@@ -527,16 +527,7 @@ tests config = do
       cabal "build" []
       runExe' "exe" [] >>= assertOutputContains "fromList [(0,2),(2,4)]"
 
-  tc "Backpack/Includes3" $ do
-      cabal "configure" []
-      cabal "build" []
-      -- TODO: refactorize
-      pkg_dir <- packageDir
-      _ <- run (Just pkg_dir) "touch" ["indef/Foo.hs"]
-      cabal "build" []
-      runExe' "exe" [] >>= assertOutputContains "fromList [(0,2),(2,4)]"
-
-  tc "Backpack/Includes4" $ do
+  tc "Backpack/Includes4" . whenGhcVersion (>= Version [8,1] []) $ do
       cabal "configure" []
       cabal "build" []
       runExe' "exe" [] >>= assertOutputContains "A (B (A (B"

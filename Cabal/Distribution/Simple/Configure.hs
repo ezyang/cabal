@@ -88,8 +88,9 @@ import qualified Distribution.Simple.LHC   as LHC
 import qualified Distribution.Simple.UHC   as UHC
 import qualified Distribution.Simple.HaskellSuite as HaskellSuite
 
--- Prefer the more generic Data.Traversable.mapM to Prelude.mapM
-import Prelude hiding ( mapM )
+-- Prefer the more generic Data.Traversable.mapM to Prelude.mapM,
+-- similar with concat
+import Prelude hiding ( mapM, concat )
 import Control.Exception
     ( Exception, evaluate, throw, throwIO, try )
 import Control.Exception ( ErrorCall )
@@ -128,6 +129,7 @@ import Text.PrettyPrint
     , punctuate, quotes, render, renderStyle, sep, text, vcat, hang )
 import Distribution.Compat.Environment ( lookupEnv )
 import Distribution.Compat.Exception ( catchExit, catchIO )
+import Data.Foldable (concat)
 
 import Data.Graph (graphFromEdges, topSort)
 
@@ -1640,7 +1642,7 @@ configureComponents
     :: ConfigFlags
     -> PackageDescription
     -> FlagAssignment
-    -> Map PackageName (ComponentId, PackageId)
+    -> Map PackageName [(ComponentId, PackageId)]
     -> Map String ComponentId
     -> [Component]
     -> [ConfiguredComponent]
@@ -1649,18 +1651,28 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 comps
   where
     go (pkg_map, exe_map) component = ((pkg_map', exe_map'), conf)
       where bi = componentBuildInfo component
+            -- NB: Some cleverness is required here.  We'd like to say,
+            -- for every PackageName, there is a unique ComponentId,
+            -- but for the internal package, there are actually two
+            -- possibilities: if there is an explicit version range
+            -- which is incompatible with the version of pkg_descr,
+            -- then we are obliged to use the EXTERNAL copy of
+            -- the library.
             deps = [ (cid, pkgid)
-                   | Dependency name _ <- targetBuildDepends bi
-                   , Just (cid, pkgid) <- [ Map.lookup name pkg_map ] ]
+                   | Dependency name reqVer <- targetBuildDepends bi
+                   , (cid, pkgid) <- concat (Map.lookup name pkg_map)
+                   , packageVersion pkgid `withinRange` reqVer ]
             -- The includes are based off of 'backpack-includes', but we
             -- also fill in a default, implicit include, for everything
             -- that is in 'build-depends' but not in 'backpack-includes'.
             btools = [ cid
                      | Dependency (PackageName name) _ <- buildTools bi
                      , Just cid <- [ Map.lookup name exe_map ] ]
+            deps_set = Set.fromList (map fst deps)
             includes0 = [ (cid, pid, rns)
                         | (name, rns) <- backpackIncludes bi
-                        , Just (cid, pid) <- [ Map.lookup name pkg_map ] ]
+                        , (cid, pid) <- concat (Map.lookup name pkg_map)
+                        , cid `Set.member` deps_set ]
             used_includes = Set.fromList (map (\(cid,_,_) -> cid) includes0)
             includes1 = map (\(cid, pid) -> (cid, pid, (defaultRenaming, defaultRenaming)))
                       $ filter (flip Set.notMember used_includes . fst) deps
@@ -1670,7 +1682,7 @@ configureComponents cfg pkg_descr flagAssignment pkg_map0 exe_map0 comps
                         (map fst deps) flagAssignment
             pkg_map'
                 | CLibName str <- componentName component
-                = Map.insert (PackageName str) (this_cid, package pkg_descr) pkg_map
+                = Map.insertWith (++) (PackageName str) [(this_cid, package pkg_descr)] pkg_map
                 | otherwise = pkg_map
             exe_map'
                 | CExeName str <- componentName component
@@ -1947,7 +1959,7 @@ mkComponentsLocalBuildInfo verbosity cfg comp installedPackages pkg_descr
                            graph flagAssignment = do
     let conf_pkg_map = Map.fromList
             [(packageName pkg,
-               (Installed.installedComponentId pkg, Installed.sourcePackageId pkg))
+               [(Installed.installedComponentId pkg, Installed.sourcePackageId pkg)])
             | pkg <- externalPkgDeps]
         graph1 = configureComponents cfg pkg_descr flagAssignment
                  conf_pkg_map Map.empty graph
