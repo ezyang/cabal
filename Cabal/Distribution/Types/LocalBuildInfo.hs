@@ -58,6 +58,7 @@ data LocalBuildInfo = LocalBuildInfo {
                 -- intrapackage dependency graph.
                 -- TODO: this is assumed to be short; otherwise we want
                 -- some sort of ordered map.
+        componentNameMap :: (),
         installedPkgs :: InstalledPackageIndex,
                 -- ^ All the info about the installed packages that the
                 -- current package depends on (directly or indirectly).
