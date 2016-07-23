@@ -29,12 +29,6 @@ install_from_tarball() {
    fi
 }
 
-timed cabal update
-
-echo Cabal
-(cd Cabal && timed cabal sdist)
-(cd Cabal && timed install_from_tarball)
-
 echo cabal-install
-(cd cabal-install && timed cabal sdist)
-(cd cabal-install && timed install_from_tarball)
+find cabal-install/dist
+(cd cabal-install && timed cabal sdist -v)
