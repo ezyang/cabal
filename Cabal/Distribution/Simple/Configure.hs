@@ -685,6 +685,7 @@ configure (pkg_descr0', pbi) cfg = do
                 hostPlatform        = compPlatform,
                 buildDir            = buildDir,
                 componentsConfigs   = buildComponents,
+                componentNameMap    = (),
                 installedPkgs       = packageDependsIndex,
                 pkgDescrFile        = Nothing,
                 localPkgDescr       = pkg_descr',
