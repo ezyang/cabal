@@ -16,6 +16,7 @@ module Distribution.Client.ProjectPlanning (
     --      plan definition. Need to better separate InstallPlan definition.
     GenericBuildResult(..),
     BuildResult,
+    BuildResults,
     BuildSuccess(..),
     BuildFailure(..),
     DocsResult(..),
@@ -61,8 +62,8 @@ import           Distribution.Client.ProjectConfig
 import           Distribution.Client.ProjectPlanOutput
 
 import           Distribution.Client.Types
-                   hiding ( BuildResult, BuildSuccess(..), BuildFailure(..)
-                          , DocsResult(..), TestsResult(..) )
+                   hiding ( BuildResult, BuildResults, BuildSuccess(..)
+                          , BuildFailure(..), DocsResult(..), TestsResult(..) )
 import qualified Distribution.Client.InstallPlan as InstallPlan
 import qualified Distribution.Client.SolverInstallPlan as SolverInstallPlan
 import           Distribution.Client.Dependency
@@ -1947,6 +1948,7 @@ setupHsConfigureFlags (ReadyPackage
         (Cabal.ConfigFlags {..})
   where
     configDistPref            = toFlag builddir
+    configCabalFilePath       = mempty
     configVerbosity           = toFlag verbosity
 
     configIPID                = toFlag (display (installedUnitId pkg))
