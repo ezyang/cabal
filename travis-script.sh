@@ -14,7 +14,7 @@ CABAL_INSTALL_BDIR="${PWD}/dist-newstyle/build/cabal-install-${CABAL_VERSION}"
 CABAL_INSTALL_SETUP="${CABAL_INSTALL_BDIR}/setup/setup"
 # --hide-successes uses terminal control characters which mess up
 # Travis's log viewer.  So just print them all!
-TEST_OPTIONS=""
+TEST_OPTIONS="--num-threads 2"
 
 # ---------------------------------------------------------------------
 # Update the Cabal index
