@@ -55,7 +55,7 @@ timed cabal new-build Cabal Cabal:package-tests Cabal:unit-tests
 # http://stackoverflow.com/questions/14970663/why-doesnt-bash-flag-e-exit-when-a-subshell-fails
 
 # Run tests
-(export CABAL_PACKAGETESTS_DB_STACK="clear:global:${CABAL_INPLACE_PKGDB}:${CABAL_STORE_PKGDB}"; cd Cabal && timed ${CABAL_BDIR}/build/package-tests/package-tests $TEST_OPTIONS) || exit $?
+(cd Cabal && timed ${CABAL_BDIR}/build/package-tests/package-tests $TEST_OPTIONS) || exit $?
 (cd Cabal && timed ${CABAL_BDIR}/build/unit-tests/unit-tests       $TEST_OPTIONS) || exit $?
 
 # Run haddock (hack: use the Setup script from package-tests!)
@@ -91,7 +91,7 @@ timed cabal new-build cabal-install:cabal \
 # Run tests
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests         $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/solver-quickcheck/solver-quickcheck  $TEST_OPTIONS --quickcheck-tests=1000) || exit $?
-(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
+(export CABAL_INTEGRATIONTESTS_PACKAGE_DB_FLAGS="--package-db=\"${CABAL_INPLACE_PKGDB}\" --package-db=\"${CABAL_STORE_PKGDB}\""; cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 $TEST_OPTIONS) || exit $?
 
 # Haddock
