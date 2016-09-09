@@ -9,6 +9,8 @@
 
 . ./travis-common.sh
 
+CABAL_INPLACE_PKGDB="${PWD}/dist-newstyle/packagedb/ghc-${GHCVER}"
+CABAL_STORE_PKGDB="${HOME}/.cabal/store/ghc-${GHCVER}/package.db"
 CABAL_BDIR="${PWD}/dist-newstyle/build/Cabal-${CABAL_VERSION}"
 CABAL_INSTALL_BDIR="${PWD}/dist-newstyle/build/cabal-install-${CABAL_VERSION}"
 CABAL_INSTALL_SETUP="${CABAL_INSTALL_BDIR}/setup/setup"
@@ -89,7 +91,7 @@ timed cabal new-build cabal-install:cabal \
 # Run tests
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests         $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/solver-quickcheck/solver-quickcheck  $TEST_OPTIONS --quickcheck-tests=1000) || exit $?
-(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
+(export CABAL_INTEGRATIONTESTS_PACKAGE_DB_FLAGS="--package-db=\"${CABAL_STORE_PKGDB}\" --package-db=\"${CABAL_INPLACE_PKGDB}\""; cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 $TEST_OPTIONS) || exit $?
 
 # Haddock

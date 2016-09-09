@@ -78,7 +78,7 @@ import Distribution.Simple.Setup
 import Distribution.Simple.Utils
          ( die, debug, info, cabalVersion, tryFindPackageDesc, comparing
          , createDirectoryIfMissingVerbose, installExecutableFile
-         , copyFileVerbose, rewriteFile, intercalate )
+         , copyFileVerbose, rewriteFile, intercalate, warn )
 import Distribution.Client.Utils
          ( inDir, tryCanonicalizePath, withExtraPathEnv
          , existsAndIsMoreRecentThan, moreRecentFile, withEnv
@@ -480,6 +480,11 @@ getExternalSetupMethod verbosity options pkg bt = do
   createDirectoryIfMissingVerbose verbosity True setupDir
   (cabalLibVersion, mCabalLibInstalledPkgId, options') <- cabalLibVersionToUse
   debug verbosity $ "Using Cabal library version " ++ display cabalLibVersion
+  when (cabalLibVersion < cabalVersion) $
+    warn verbosity $
+    "Using a Cabal library version older than used for cabal-install, " ++
+    "which uses " ++ display cabalVersion ++ ". If this fails, update " ++
+    "the Setup script."
   path <- if useCachedSetupExecutable
           then getCachedSetupExecutable options'
                cabalLibVersion mCabalLibInstalledPkgId

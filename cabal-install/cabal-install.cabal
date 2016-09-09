@@ -182,6 +182,7 @@ Extra-Source-Files:
   tests/IntegrationTests2/build/setup-simple/A.hs
   tests/IntegrationTests2/build/setup-simple/Setup.hs
   tests/IntegrationTests2/build/setup-simple/a.cabal
+  tests/IntegrationTests2/exception/bad-config/cabal.project
   tests/IntegrationTests2/exception/build/Main.hs
   tests/IntegrationTests2/exception/build/a.cabal
   tests/IntegrationTests2/exception/configure/a.cabal
@@ -330,6 +331,7 @@ executable cabal
         Distribution.Solver.Modular.ConfiguredConversion
         Distribution.Solver.Modular.ConflictSet
         Distribution.Solver.Modular.Cycles
+        Distribution.Solver.Modular.Degree
         Distribution.Solver.Modular.Dependency
         Distribution.Solver.Modular.Explore
         Distribution.Solver.Modular.Flag
@@ -348,6 +350,7 @@ executable cabal
         Distribution.Solver.Modular.Validate
         Distribution.Solver.Modular.Var
         Distribution.Solver.Modular.Version
+        Distribution.Solver.Modular.WeightedPSQ
         Paths_cabal_install
 
     -- NOTE: when updating build-depends, don't forget to update version regexps
@@ -439,6 +442,7 @@ Test-Suite unit-tests
     UnitTests.Distribution.Solver.Modular.RetryLog
     UnitTests.Distribution.Solver.Modular.Solver
     UnitTests.Distribution.Solver.Modular.DSL
+    UnitTests.Distribution.Solver.Modular.WeightedPSQ
     UnitTests.Options
   build-depends:
         base,
