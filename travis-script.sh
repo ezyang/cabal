@@ -91,6 +91,8 @@ timed cabal new-build cabal-install:cabal \
 # Run tests
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests         $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/solver-quickcheck/solver-quickcheck  $TEST_OPTIONS --quickcheck-tests=1000) || exit $?
+ls $CABAL_INPLACE_PKGDB
+ls $CABAL_STORE_PKGDB
 (export CABAL_INTEGRATIONTESTS_PACKAGE_DB_FLAGS="--package-db=\"${CABAL_INPLACE_PKGDB}\" --package-db=\"${CABAL_STORE_PKGDB}\""; cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 $TEST_OPTIONS) || exit $?
 
