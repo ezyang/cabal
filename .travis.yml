@@ -20,7 +20,9 @@ branches:
 matrix:
   allow_failures:
    - env: GHCVER=head SCRIPT=script
+     sudo: required
    - env: GHCVER=head SCRIPT=bootstrap
+     sudo: required
 
  # TODO add PARSEC_BUNDLED=YES when it's so
  # It seems pointless to run head if we're going to ignore the results.
