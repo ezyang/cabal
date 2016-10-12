@@ -18,11 +18,13 @@ branches:
 # test only against the last release in a major GHC version. Feel free to omit
 # lines listings versions you don't need/want testing for.
 matrix:
-  allow_failures:
+  include:
    - env: GHCVER=head SCRIPT=script
      sudo: required
+     os: linux
    - env: GHCVER=head SCRIPT=bootstrap
      sudo: required
+     os: linux
 
  # TODO add PARSEC_BUNDLED=YES when it's so
  # It seems pointless to run head if we're going to ignore the results.
