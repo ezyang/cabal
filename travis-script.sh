@@ -9,8 +9,10 @@
 
 . ./travis-common.sh
 
-CABAL_STORE_DB="${HOME}/.cabal/store/ghc-${GHCVER}/package.db"
-CABAL_LOCAL_DB="${PWD}/dist-newstyle/packagedb/ghc-${GHCVER}"
+# When GHCVER=head, that is NOT the path we need to use
+REALGHCVER=$(ghc --version | awk '{ print $NF }')
+CABAL_STORE_DB="${HOME}/.cabal/store/ghc-${REALGHCVER}/package.db"
+CABAL_LOCAL_DB="${PWD}/dist-newstyle/packagedb/ghc-${REALGHCVER}"
 CABAL_BDIR="${PWD}/dist-newstyle/build/Cabal-${CABAL_VERSION}"
 CABAL_INSTALL_BDIR="${PWD}/dist-newstyle/build/cabal-install-${CABAL_VERSION}"
 CABAL_INSTALL_SETUP="${CABAL_INSTALL_BDIR}/setup/setup"
