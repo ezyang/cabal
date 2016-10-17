@@ -29,7 +29,7 @@ timed cabal update
 # ---------------------------------------------------------------------
 
 if ! command -v happy; then
-    timed cabal install happy --constraint "unix >= 2.7.1.0"
+    timed cabal install happy --constraint="unix >= 2.7.1.0"
 fi
 
 # ---------------------------------------------------------------------
