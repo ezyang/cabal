@@ -6,6 +6,7 @@ CABAL_VERSION="1.25.0.0"
 # Timing / diagnostic output
 # ---------------------------------------------------------------------
 
+# WARNING: This function does not handle quotes correctly.
 timed() {
     echo "\$ $*"
     start_time=$(date +%s)
