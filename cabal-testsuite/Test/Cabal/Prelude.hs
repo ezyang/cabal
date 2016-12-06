@@ -561,6 +561,14 @@ assertFindInFile needle path =
                          (assertFailure ("expected: " ++ needle ++ "\n" ++
                                          " in file: " ++ path)))
 
+assertNotFoundInFile :: MonadIO m => WithCallStack (String -> FilePath -> m ())
+assertNotFoundInFile needle path =
+    liftIO $ withFileContents path
+                 (\contents ->
+                  when (needle `isInfixOf` contents)
+                       (assertFailure ("unexpected: " ++ needle ++ "\n" ++
+                                       " in file: " ++ path)))
+
 -- | Replace line breaks with spaces, correctly handling "\r\n".
 concatOutput :: String -> String
 concatOutput = unwords . lines . filter ((/=) '\r')
