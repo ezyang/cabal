@@ -375,9 +375,12 @@ instance Parsec IncludeRenaming where
 instance Parsec Mixin where
     parsec = do
         mod_name <- parsec
+        mb_lib_name <- P.option Nothing $ do
+            _ <- P.char ':'
+            fmap Just parsec
         P.spaces
         incl <- parsec
-        return (Mixin mod_name incl)
+        return (Mixin mod_name mb_lib_name incl)
 
 -------------------------------------------------------------------------------
 -- Utilities
