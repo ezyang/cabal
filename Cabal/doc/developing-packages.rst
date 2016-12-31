@@ -1054,26 +1054,22 @@ look something like this:
     cabal-version:  >= 1.23
     build-type:     Simple
 
-    library foo-internal
+    library internal
         exposed-modules: Foo.Internal
         build-depends: base
 
     library
         exposed-modules: Foo.Public
-        build-depends: foo-internal, base
+        build-depends: base, foo:internal
 
     test-suite test-foo
         type:       exitcode-stdio-1.0
         main-is:    test-foo.hs
-        build-depends: foo-internal, base
+        build-depends: base, foo:internal
 
-Internal libraries are also useful for packages that define multiple
-executables, but do not define a publically accessible library. Internal
-libraries are only visible internally in the package (so they can only
-be added to the :pkg-field:`build-depends` of same-package libraries,
-executables, test suites, etc.) Internal libraries locally shadow any
-packages which have the same name (so don't name an internal library
-with the same name as an external dependency.)
+An internal library is referenced by qualifying the library name with
+the name of the package it comes from.  At the moment, referencing
+internal libraries of external packages is not supported.
 
 Opening an interpreter session
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
