@@ -2,6 +2,7 @@ module Distribution.Types.DependencyMap (
     DependencyMap,
     toDepMap,
     fromDepMap,
+    lookupDepMap,
     constrainBy,
 ) where
 
@@ -33,6 +34,9 @@ toDepMap ds =
 
 fromDepMap :: DependencyMap -> [Dependency]
 fromDepMap m = [ Dependency p vr | (p,vr) <- Map.toList (unDependencyMap m) ]
+
+lookupDepMap :: DependencyMap -> PackageName -> Maybe VersionRange
+lookupDepMap (DependencyMap m) pn = Map.lookup pn m
 
 -- Apply extra constraints to a dependency map.
 -- Combines dependencies where the result will only contain keys from the left

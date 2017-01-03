@@ -49,11 +49,12 @@ module Distribution.PackageDescription.Parse (
 import Prelude ()
 import Distribution.Compat.Prelude
 
+import Distribution.Types.BuildInfo
 import Distribution.Types.Dependency
 import Distribution.Types.ForeignLib
 import Distribution.Types.ForeignLibType
 import Distribution.Types.UnqualComponentName
-import Distribution.Types.CondTree
+import Distribution.Types.BuildDependency
 import Distribution.ParseUtils hiding (parseFields)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Utils
@@ -423,7 +424,9 @@ binfoFieldDescrs =
            toolDepends        (\xs  binfo -> binfo{toolDepends=xs})
  , commaListFieldWithSep vcat "build-depends"
            disp                   parse
-           targetBuildDepends (\xs binfo -> binfo{targetBuildDepends=xs})
+           buildDependencies
+           (\xs binfo -> binfo{targetBuildDepends=map buildDependencyToDependency xs,
+                               implicitMixins=map buildDependencyToMixin xs})
  , commaListFieldWithSep vcat "mixins"
            disp                   parse
            mixins   (\xs binfo -> binfo{mixins=xs})

@@ -241,6 +241,7 @@ library
     Distribution.Types.ComponentRequestedSpec
     Distribution.Types.TargetInfo
     Distribution.Types.UnqualComponentName
+    Distribution.Types.BuildDependency
     Distribution.Utils.Generic
     Distribution.Utils.NubList
     Distribution.Utils.ShortText

@@ -8,6 +8,7 @@ module Distribution.Types.BuildInfo (
     allLanguages,
     allExtensions,
     usedExtensions,
+    buildDependencies,
 
     hcOptions,
     hcProfOptions,
@@ -22,10 +23,14 @@ import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency
 import Distribution.Types.LegacyExeDependency
 import Distribution.Types.PkgconfigDependency
+import Distribution.Types.DependencyMap
+import Distribution.Types.BuildDependency
 
 import Distribution.ModuleName
 import Distribution.Compiler
 import Language.Haskell.Extension
+
+import qualified Data.Map as Map
 
 -- Consider refactoring into executable and library versions.
 data BuildInfo = BuildInfo {
@@ -77,10 +82,58 @@ data BuildInfo = BuildInfo {
         customFieldsBI    :: [(String,String)], -- ^Custom fields starting
                                                 -- with x-, stored in a
                                                 -- simple assoc-list.
-        targetBuildDepends :: [Dependency], -- ^ Dependencies specific to a library or executable target
+
+        -- | These are the library-level dependencies we have on
+        -- other packages.  This corresponds closely to @build-depends@,
+        -- but this field drops any component names (anywhere you
+        -- see @pkg:lib >= 2.0@, this actually indicates the
+        -- 'Dependency' @pkg >= 2.0@.  This field does NOT control
+        -- what libraries are brought into scope, for import in
+        -- Haskell (for that, see 'implicitMixins' and 'mixins').
+        -- This combined with 'implicitMixins' constitute the "full"
+        -- meaning of @build-depends@; for backwards compatibility
+        -- we don't keep these together.
+        --
+        -- Historically, this got the name 'targetBuildDepends' because
+        -- it was the @build-depends@ specific to a "target" (i.e.,
+        -- a component); 'buildDepends' was reserved for the
+        -- package-wide @build-depends@.  These days, target-specific
+        -- dependencies are the standard mode of use, so we really
+        -- ought to rename this.
+        targetBuildDepends :: [Dependency],
+
+        -- | Implicit mix-ins implied by the @build-depends@ field,
+        -- as historically putting a library in @build-depends was
+        -- sufficient to bring the modules into scope.
+        implicitMixins :: [Mixin],
+
+        -- | Explicitly specified mix-ins specified by the @mixins@
+        -- field.  If there is a 'Mixin' for a
+        -- 'PackageName'/'UnqualComponentName' combination here, it
+        -- overrides the corresponding entry from 'implicitMixins'.
         mixins :: [Mixin]
     }
     deriving (Generic, Show, Read, Eq, Typeable, Data)
+
+-- | Attempt to reconstruct the literal @build-depends@ entries.
+--
+-- NB: If we have an 'implicitMixin' without a corresponding
+-- 'Dependency', it will be dropped.  This INCLUDES if the mixin
+-- is an internal dep; i.e., for this very package.  This situation
+-- shouldn't occur in practice because it means that the 'Dependency'
+-- set was expanded/contracted, which should never happen (at
+-- the moment, the only modifications we have are for changing
+-- the 'VersionRange'.)
+buildDependencies :: BuildInfo -> [BuildDependency]
+buildDependencies bi = do
+    -- Make sure each PackageName shows up once...
+    Dependency pn vr <- fromDepMap (toDepMap (targetBuildDepends bi))
+    case Map.lookup pn imap of
+        Just xs@(_:_) -> do Mixin _ mb_cn _ <- xs
+                            return (BuildDependency pn mb_cn vr)
+        _ -> return (BuildDependency pn Nothing vr)
+  where
+    imap = Map.fromListWith (++) [ (mixinPackageName m, [m]) | m <- implicitMixins bi ]
 
 instance Binary BuildInfo
 
@@ -116,7 +169,8 @@ instance Monoid BuildInfo where
     sharedOptions       = [],
     customFieldsBI      = [],
     targetBuildDepends  = [],
-    mixins    = []
+    implicitMixins      = [],
+    mixins              = []
   }
   mappend = (<>)
 
@@ -152,7 +206,8 @@ instance Semigroup BuildInfo where
     sharedOptions       = combine    sharedOptions,
     customFieldsBI      = combine    customFieldsBI,
     targetBuildDepends  = combineNub targetBuildDepends,
-    mixins    = combine mixins
+    implicitMixins      = combine    implicitMixins,
+    mixins              = combine    mixins
   }
     where
       combine    field = field a `mappend` field b

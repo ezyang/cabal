@@ -18,7 +18,6 @@ import Distribution.Compat.Prelude hiding ((<>))
 
 import Distribution.Backpack.Id
 
-import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency
 import Distribution.Types.IncludeRenaming
 import Distribution.Types.Mixin
@@ -108,7 +107,6 @@ toConfiguredComponent pkg_descr this_cid deps_map component =
         cc_includes = explicit_includes ++ implicit_includes
     }
   where
-    pn = packageName pkg_descr
     bi = componentBuildInfo component
 
     -- Resolve each @backpack-include@ into the actual dependency
@@ -136,16 +134,17 @@ toConfiguredComponent pkg_descr this_cid deps_map component =
     -- NB: This INCLUDES if you depend pkg:sublib (because other way
     -- there's no way to depend on a sublib without depending on the
     -- main library as well).
-    used_explicitly = Set.fromList (map (packageName . ci_pkgid) explicit_includes)
+    used_explicitly = Set.fromList (map (\m -> (mixinPackageName m, mixinLibraryName m))
+                                        (mixins bi))
     lib_deps
         | newPackageDepsBehaviour pkg_descr
-        = [ case Map.lookup (name, CLibName) deps_map of
+        = [ case Map.lookup (pn, maybe CLibName CSubLibName mb_cn) deps_map of
                 Nothing ->
                     error ("toConfiguredComponent: " ++ display (packageName pkg_descr) ++
-                            " " ++ display name)
+                            " " ++ display pn)
                 Just r -> r
-          | Dependency name _ <- targetBuildDepends bi
-          , Set.notMember name used_explicitly ]
+          | Mixin pn mb_cn _ <- implicitMixins bi
+          , Set.notMember (pn,mb_cn) used_explicitly ]
         | otherwise
         -- deps_map contains a mix of internal and external deps.
         -- We want all the public libraries (dep_cn == CLibName)
@@ -155,10 +154,10 @@ toConfiguredComponent pkg_descr this_cid deps_map component =
         -- because it would imply a cyclic dependency for the
         -- library itself.
         = [ r
-          | ((dep_pn,dep_cn), r) <- Map.toList deps_map
-          , dep_pn /= pn
-          , dep_cn == CLibName
-          , Set.notMember dep_pn used_explicitly ]
+          | ((pn,cn), r) <- Map.toList deps_map
+          , pn /=  packageName pkg_descr
+          , cn == CLibName
+          , Set.notMember (pn, Nothing) used_explicitly ]
     implicit_includes
         = map (\(cid, pid) ->
                     ComponentInclude {
@@ -174,7 +173,7 @@ toConfiguredComponent pkg_descr this_cid deps_map component =
                -- NB: we silently swallow non-existent build-tools,
                -- because historically they did not have to correspond
                -- to Haskell executables.
-               , Just (cid, _) <- [ Map.lookup (pn, cn) deps_map ] ]
+               , Just (cid, _) <- [ Map.lookup (packageName pkg_descr, cn) deps_map ] ]
 
     is_public = componentName component == CLibName
 
