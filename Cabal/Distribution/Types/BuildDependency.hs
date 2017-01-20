@@ -41,11 +41,10 @@ instance Text BuildDependency where
 
     parse = do name <- parse
                mb_cname <- option Nothing $ do
-                                _ <- Parse.char ':'
+                                _ <- char ':'
                                 fmap Just parse
-               Parse.skipSpaces
+               skipSpaces
                ver <- parse <++ return anyVersion
-               Parse.skipSpaces
                return (BuildDependency name mb_cname ver)
 
 buildDependencyToDependency :: BuildDependency -> Dependency

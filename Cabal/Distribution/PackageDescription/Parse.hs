@@ -638,7 +638,7 @@ constraintFieldNames = ["build-depends"]
 -- they add and define an accessor that specifies what the dependencies
 -- are.  This way we would completely reuse the parsing knowledge from the
 -- field descriptor.
-parseConstraint :: Field -> ParseResult [Dependency]
+parseConstraint :: Field -> ParseResult [BuildDependency]
 parseConstraint (F l n v)
     | n `elem` constraintFieldNames = runP l n (parseCommaList parse) v
 parseConstraint f = userBug $ "Constraint was expected (got: " ++ show f ++ ")"
@@ -1106,7 +1106,7 @@ parsePackageDescription file = do
         -- to check the CondTree, rather than grovel everywhere
         -- inside the conditional bits).
         deps <- liftM concat
-              . traverse (lift . parseConstraint)
+              . traverse (lift . fmap (map buildDependencyToDependency) . parseConstraint)
               . filter isConstraint
               $ simplFlds
 

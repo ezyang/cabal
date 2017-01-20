@@ -96,6 +96,7 @@ import Distribution.Simple.InstallDirs
 import Distribution.Verbosity
 import Distribution.Utils.NubList
 import Distribution.Types.Dependency
+import Distribution.Types.UnqualComponentName
 
 import Distribution.Compat.Semigroup (Last' (..))
 
@@ -413,7 +414,7 @@ data ConfigFlags = ConfigFlags {
     configStripLibs :: Flag Bool,      -- ^Enable library stripping
     configConstraints :: [Dependency], -- ^Additional constraints for
                                        -- dependencies.
-    configDependencies :: [(PackageName, ComponentId)],
+    configDependencies :: [(PackageName, Maybe UnqualComponentName, ComponentId)],
       -- ^The packages depended on.
     configInstantiateWith :: [(ModuleName, Module)],
       -- ^ The requested Backpack instantiation.  If empty, either this
@@ -784,7 +785,7 @@ configureOptions showOrParseArgs =
          configDependencies (\v flags -> flags { configDependencies = v})
          (reqArg "NAME=CID"
                  (readP_to_E (const "dependency expected") ((\x -> [x]) `fmap` parseDependency))
-                 (map (\x -> display (fst x) ++ "=" ++ display (snd x))))
+                 (map (\(pn,mb_cn,cid) -> display pn ++ (maybe "" (\x -> ":" ++ display x) mb_cn) ++ "=" ++ display cid)))
 
       ,option "" ["instantiate-with"]
         "A mapping of signature names to concrete module instantiations."
@@ -875,12 +876,15 @@ showProfDetailLevelFlag :: Flag ProfDetailLevel -> [String]
 showProfDetailLevelFlag NoFlag    = []
 showProfDetailLevelFlag (Flag dl) = [showProfDetailLevel dl]
 
-parseDependency :: Parse.ReadP r (PackageName, ComponentId)
+parseDependency :: Parse.ReadP r (PackageName, Maybe UnqualComponentName, ComponentId)
 parseDependency = do
   x <- parse
+  y <- Parse.option Nothing $ do
+        _ <- Parse.char ':'
+        fmap Just parse
   _ <- Parse.char '='
-  y <- parse
-  return (x, y)
+  z <- parse
+  return (x, y, z)
 
 installDirsOptions :: [OptionField (InstallDirs (Flag PathTemplate))]
 installDirsOptions =

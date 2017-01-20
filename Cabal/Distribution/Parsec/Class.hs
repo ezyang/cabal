@@ -57,6 +57,7 @@ import           Distribution.Types.ForeignLibOption          (ForeignLibOption 
 import           Distribution.Types.ModuleRenaming
 import           Distribution.Types.IncludeRenaming
 import           Distribution.Types.Mixin
+import           Distribution.Types.BuildDependency
 import           Distribution.Types.UnqualComponentName
                  (UnqualComponentName, mkUnqualComponentName)
 import           Distribution.Version
@@ -381,6 +382,16 @@ instance Parsec Mixin where
         P.spaces
         incl <- parsec
         return (Mixin mod_name mb_lib_name incl)
+
+instance Parsec BuildDependency where
+    parsec = do
+        name <- parsec
+        mb_cname <- P.option Nothing $ do
+            _ <- P.char ':'
+            fmap Just parsec
+        P.spaces
+        ver <- parsec <|> pure anyVersion
+        return (BuildDependency name mb_cname ver)
 
 -------------------------------------------------------------------------------
 -- Utilities

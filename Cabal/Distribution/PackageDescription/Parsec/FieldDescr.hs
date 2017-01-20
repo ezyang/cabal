@@ -43,6 +43,8 @@ import           Distribution.ModuleName               (ModuleName)
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.Types.ForeignLib
+import           Distribution.Types.BuildInfo
+import           Distribution.Types.BuildDependency
 import           Distribution.Parsec.Class
 import           Distribution.Parsec.Types.Common
 import           Distribution.Parsec.Types.FieldDescr
@@ -428,7 +430,9 @@ binfoFieldDescrs =
            toolDepends        (\xs  binfo -> binfo{toolDepends=xs})
  , commaListFieldWithSep vcat "build-depends"
        disp               parsec
-       targetBuildDepends (\xs binfo -> binfo{targetBuildDepends=xs})
+       buildDependencies
+       (\xs binfo -> binfo{targetBuildDepends=map buildDependencyToDependency xs,
+                           implicitMixins=map buildDependencyToMixin xs})
  , commaListFieldWithSep vcat "mixins"
        disp               parsec
        mixins (\xs binfo -> binfo{mixins=xs})

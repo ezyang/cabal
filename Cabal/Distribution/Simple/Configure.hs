@@ -72,6 +72,7 @@ import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Simple.PackageIndex (InstalledPackageIndex)
 import Distribution.PackageDescription as PD hiding (Flag)
 import Distribution.Types.PackageDescription as PD
+import Distribution.Types.DependencyMap
 import Distribution.PackageDescription.PrettyPrint
 import Distribution.PackageDescription.Configuration
 import Distribution.PackageDescription.Check hiding (doesFileExist)
@@ -410,11 +411,6 @@ configure (pkg_descr0', pbi) cfg = do
         <- getInstalledPackages (lessVerbose verbosity) comp
                                   packageDbs programDb
 
-    -- The set of package names which are "shadowed" by internal
-    -- packages, and which component they map to
-    let internalPackageSet :: Map PackageName ComponentName
-        internalPackageSet = getInternalPackages pkg_descr0
-
     -- Make a data structure describing what components are enabled.
     let enabled :: ComponentRequestedSpec
         enabled = case mb_cname of
@@ -450,11 +446,12 @@ configure (pkg_descr0', pbi) cfg = do
     -- that is not possible to configure a test-suite to use one
     -- version of a dependency, and the executable to use another.
     (allConstraints  :: [Dependency],
-     requiredDepsMap :: Map PackageName InstalledPackageInfo)
+     requiredDepsMap :: Map (PackageName, ComponentName) InstalledPackageInfo)
         <- either die return $
               combinedConstraints (configConstraints cfg)
                                   (configDependencies cfg)
                                   installedPackageSet
+    let allConstraintsMap = toDepMap allConstraints
 
     -- pkg_descr:   The resolved package description, that does not contain any
     --              conditionals, because we have have an assignment for
@@ -480,8 +477,7 @@ configure (pkg_descr0', pbi) cfg = do
                     (fromFlagOrDefault False (configExactConfiguration cfg))
                     (packageName pkg_descr0)
                     installedPackageSet
-                    internalPackageSet
-                    requiredDepsMap)
+                    allConstraintsMap)
                 comp
                 compPlatform
                 pkg_descr0
@@ -523,11 +519,10 @@ configure (pkg_descr0', pbi) cfg = do
     -- For one it's deterministic; for two, we need to associate
     -- them with renamings which would require a far more complicated
     -- input scheme than what we have today.)
-    externalPkgDeps :: [(PackageName, InstalledPackageInfo)]
+    externalPkgDeps :: [(PackageName, ComponentName, InstalledPackageInfo)]
         <- configureDependencies
                 verbosity
                 use_external_internal_deps
-                internalPackageSet
                 installedPackageSet
                 requiredDepsMap
                 pkg_descr
@@ -594,7 +589,6 @@ configure (pkg_descr0', pbi) cfg = do
     -- components (which may build-depends on each other) and form a graph.
     -- From there, we build a ComponentLocalBuildInfo for each of the
     -- components, which lets us actually build each component.
-    -- internalPackageSet
     -- use_external_internal_deps
     (buildComponents :: [ComponentLocalBuildInfo],
      packageDependsIndex :: InstalledPackageIndex) <-
@@ -811,8 +805,7 @@ checkExactConfiguration pkg_descr0 cfg = do
 -- It must be *any libraries that might be* defined rather than the
 -- actual definitions, because these depend on conditionals in the .cabal
 -- file, and we haven't resolved them yet.  finalizePD
--- does the resolution of conditionals, and it takes internalPackageSet
--- as part of its input.
+-- does the resolution of conditionals.
 getInternalPackages :: GenericPackageDescription
                     -> Map PackageName ComponentName
 getInternalPackages pkg_descr0 =
@@ -831,13 +824,12 @@ dependencySatisfiable
     -> Bool -- ^ exact configuration?
     -> PackageName
     -> InstalledPackageIndex -- ^ installed set
-    -> Map PackageName ComponentName -- ^ internal set
-    -> Map PackageName InstalledPackageInfo -- ^ required dependencies
+    -> DependencyMap -- ^ "known" dependencies to allow under exact config
     -> (Dependency -> Bool)
 dependencySatisfiable
   use_external_internal_deps
-  exact_config pn installedPackageSet internalPackageSet requiredDepsMap
-  (Dependency depName0 vr)
+  exact_config pn installedPackageSet allConstraintsMap
+  d@(Dependency depName vr)
 
     -- When we are doing per-component configure, the behavior is very
     -- uniform: if an exact configuration is requested, check for the
@@ -857,7 +849,7 @@ dependencySatisfiable
         else depSatisfiable
 
   where
-    isInternalDep = Map.member depName0 internalPackageSet
+    isInternalDep = depName == pn
 
     -- When we're given '--exact-configuration', we assume that all
     -- dependencies and flags are exactly specified on the command
@@ -870,24 +862,8 @@ dependencySatisfiable
     -- when this fails?
     depSatisfiable =
       if exact_config
-          -- NB: required deps map is indexed by *compat* package name.
-          then depName `Map.member` requiredDepsMap
+          then isJust (lookupDepMap allConstraintsMap depName)
           else not . null . PackageIndex.lookupDependency installedPackageSet $ d
-
-    -- When it's an internal library, we have to lookup the *compat*
-    -- package name in the database; the real one won't match anything
-    d = Dependency depName vr
-    depName
-      | isInternalDep && pn /= depName0
-      = computeCompatPackageName pn
-            -- TODO: Don't go through String
-            -- TODO: Hard-coding this to be a sub-library is a
-            -- bit grotty, but currently it seems that this
-            -- function is only called on build-depends
-            -- dependencies, which must be libraries.  If
-            -- pn /= depName0, then it must be a sub library!
-            (CSubLibName (mkUnqualComponentName (unPackageName depName0)))
-      | otherwise = depName0
 
 -- | Relax the dependencies of this package if needed.
 relaxPackageDeps :: (VersionRange -> VersionRange)
@@ -997,19 +973,18 @@ checkCompilerProblems comp pkg_descr enabled = do
 configureDependencies
     :: Verbosity
     -> UseExternalInternalDeps
-    -> Map PackageName ComponentName -- ^ internal packages
     -> InstalledPackageIndex -- ^ installed packages
-    -> Map PackageName InstalledPackageInfo -- ^ required deps
+    -> Map (PackageName, ComponentName) InstalledPackageInfo -- ^ required deps
     -> PackageDescription
-    -> IO [(PackageName, InstalledPackageInfo)]
+    -> IO [(PackageName, ComponentName, InstalledPackageInfo)]
 configureDependencies verbosity use_external_internal_deps
-  internalPackageSet installedPackageSet requiredDepsMap pkg_descr = do
+  installedPackageSet requiredDepsMap pkg_descr = do
     let selectDependencies :: [Dependency] ->
                               ([FailedDependency], [ResolvedDependency])
         selectDependencies =
             partitionEithers
           . map (selectDependency (package pkg_descr)
-                                  internalPackageSet installedPackageSet
+                                  installedPackageSet
                                   requiredDepsMap use_external_internal_deps)
 
         (failedDeps, allPkgDeps) =
@@ -1170,16 +1145,15 @@ data FailedDependency = DependencyNotExists PackageName
 
 -- | Test for a package dependency and record the version we have installed.
 selectDependency :: PackageId -- ^ Package id of current package
-                 -> Map PackageName ComponentName
                  -> InstalledPackageIndex  -- ^ Installed packages
-                 -> Map PackageName InstalledPackageInfo
+                 -> Map (PackageName, ComponentName) InstalledPackageInfo
                     -- ^ Packages for which we have been given specific deps to
                     -- use
                  -> UseExternalInternalDeps -- ^ Are we configuring a
                                             -- single component?
                  -> Dependency
                  -> Either FailedDependency ResolvedDependency
-selectDependency pkgid internalIndex installedIndex requiredDepsMap
+selectDependency pkgid installedIndex requiredDepsMap
   use_external_internal_deps
   dep@(Dependency dep_pkgname vr) =
   -- If the dependency specification matches anything in the internal package
@@ -1195,11 +1169,7 @@ selectDependency pkgid internalIndex installedIndex requiredDepsMap
   --
   -- We want "build-depends: MyLibrary" always to match the internal library
   -- even if there is a newer installed library "MyLibrary-0.2".
-  case Map.lookup dep_pkgname internalIndex of
-    Just cname -> if use_external_internal_deps
-                    then do_external (Just cname)
-                    else do_internal
-    _          -> do_external Nothing
+    do_external Nothing
   where
     do_internal = Right (InternalDependency dep
                     (PackageIdentifier dep_pkgname (packageVersion pkgid)))
@@ -1338,10 +1308,10 @@ interpretPackageDbFlags userInstall specificDBs =
 -- deps in the end. So we still need to remember which installed packages to
 -- pick.
 combinedConstraints :: [Dependency] ->
-                       [(PackageName, ComponentId)] ->
+                       [(PackageName, Maybe UnqualComponentName, ComponentId)] ->
                        InstalledPackageIndex ->
                        Either String ([Dependency],
-                                      Map PackageName InstalledPackageInfo)
+                                      Map (PackageName, ComponentName) InstalledPackageInfo)
 combinedConstraints constraints dependencies installedPackages = do
 
     when (not (null badComponentIds)) $
@@ -1354,22 +1324,37 @@ combinedConstraints constraints dependencies installedPackages = do
     return (allConstraints, idConstraintMap)
 
   where
+    -- Speculation: The [Dependency] we calculate here is going to be
+    -- used to decide how to toggle flags in the final package.  But
+    -- this also makes it impossible for a package manager that knows
+    -- better to forcibly link up components from the same package
+    -- with inconsistent version numbers.
+    --
+    -- If we're given all the constraints, why do we even need the
+    -- version ranges at all? The reason is that we still need to
+    -- pick a flag assignment when finalizing the PackageDescription.
+    -- But what if the user picks the flags too?  In that case, we
+    -- really should just let the user do what they want.
+
     allConstraints :: [Dependency]
     allConstraints = constraints
-                  ++ [ thisPackageVersion (packageId pkg)
-                     | (_, _, Just pkg) <- dependenciesPkgInfo ]
+                  ++ [ Dependency pn (thisVersion (packageVersion pkg))
+                     -- NB: component name is discarded because the
+                     -- version constraint applies to the package as a
+                     -- whole.
+                     | (pn, _, _, Just pkg) <- dependenciesPkgInfo ]
 
-    idConstraintMap :: Map PackageName InstalledPackageInfo
+    idConstraintMap :: Map (PackageName, ComponentName) InstalledPackageInfo
     idConstraintMap = Map.fromList
-                        [ (packageName pkg, pkg)
-                        | (_, _, Just pkg) <- dependenciesPkgInfo ]
+                        [ ((pn, maybe CLibName CSubLibName mb_cn), pkg)
+                        | (pn, mb_cn, _, Just pkg) <- dependenciesPkgInfo ]
 
     -- The dependencies along with the installed package info, if it exists
-    dependenciesPkgInfo :: [(PackageName, ComponentId,
+    dependenciesPkgInfo :: [(PackageName, Maybe UnqualComponentName, ComponentId,
                              Maybe InstalledPackageInfo)]
     dependenciesPkgInfo =
-      [ (pkgname, cid, mpkg)
-      | (pkgname, cid) <- dependencies
+      [ (pkgname, mb_cname, cid, mpkg)
+      | (pkgname, mb_cname, cid) <- dependencies
       , let mpkg = PackageIndex.lookupComponentId
                      installedPackages cid
       ]
@@ -1378,13 +1363,13 @@ combinedConstraints constraints dependencies installedPackages = do
     -- (i.e. someone has written a hash) and didn't find it then it's
     -- an error.
     badComponentIds =
-      [ (pkgname, cid)
-      | (pkgname, cid, Nothing) <- dependenciesPkgInfo ]
+      [ (pkgname, mb_cname, cid)
+      | (pkgname, mb_cname, cid, Nothing) <- dependenciesPkgInfo ]
 
     dispDependencies deps =
       hsep [    text "--dependency="
-             <<>> quotes (disp pkgname <<>> char '=' <<>> disp cid)
-           | (pkgname, cid) <- deps ]
+             <<>> quotes (disp pkgname <<>> (maybe empty disp mb_cname) <<>> char '=' <<>> disp cid)
+           | (pkgname, mb_cname, cid) <- deps ]
 
 -- -----------------------------------------------------------------------------
 -- Configuring program dependencies
