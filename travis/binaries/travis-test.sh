@@ -13,6 +13,9 @@ HACKAGE_REPO_TOOL_BDIR="${PWD}/dist-newstyle/build/hackage-repo-tool-${HACKAGE_R
 # Travis's log viewer.  So just print them all!
 TEST_OPTIONS=""
 
+# Update index
+(timed ${CABAL_INSTALL_BDIR}/build/cabal/cabal update) || exit $?
+
 # Run tests
 (timed ${CABAL_BDIR}/build/unit-tests/unit-tests $TEST_OPTIONS) || exit $?
 

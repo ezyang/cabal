@@ -19,6 +19,9 @@ git remote add origin git@github.com:ezyang/sozu-binaries.git
 cp $ROOT/travis-install.sh .
 cp $ROOT/travis-common.sh .
 cp -R $HOME/.cabal .
+# Index files are too big for Git
+rm -fv .cabal/packages/hackage.haskell.org/00-index*
+rm -fv .cabal/packages/hackage.haskell.org/*.json
 cp -R $ROOT/dist-newstyle .
 cp -R $ROOT/cabal-testsuite .
 git add .
