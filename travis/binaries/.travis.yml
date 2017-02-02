@@ -1,0 +1,9 @@
+git:
+    # https://github.com/travis-ci/travis-ci/issues/4575
+    depth: 1
+script:
+    - echo "SUCCESS"
+notifications:
+    webhooks:
+        urls: https://sake-bot.herokuapp.com/
+        on_start: always
