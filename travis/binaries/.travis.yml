@@ -1,7 +1,7 @@
 git:
     # https://github.com/travis-ci/travis-ci/issues/4575
     depth: 1
-env: GHCVER=7.4.2
+env: GHCVER=7.6.3
 os: linux
 sudo: required
 before_install:

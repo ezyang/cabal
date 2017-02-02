@@ -22,14 +22,14 @@ matrix:
 #  - env: GHCVER=8.0.1 SCRIPT=meta BUILDER=none
 #    os: linux
 #    sudo: required
-   # These don't have -dyn/-prof whitelisted yet, so we have to
-   # do the old-style installation
-   - env: GHCVER=7.4.2 SCRIPT=script TAG="linux-7.4"
-     os: linux
-     sudo: required
-#  - env: GHCVER=7.6.3 SCRIPT=script
+#  # These don't have -dyn/-prof whitelisted yet, so we have to
+#  # do the old-style installation
+#  - env: GHCVER=7.4.2 SCRIPT=script TAG="linux-7.4"
 #    os: linux
 #    sudo: required
+   - env: GHCVER=7.6.3 SCRIPT=script TAG="linux-7.6"
+     os: linux
+     sudo: required
 #  - env: GHCVER=7.8.4 SCRIPT=script
 #    os: linux
 #    sudo: required
