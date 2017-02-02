@@ -16,14 +16,14 @@ chmod 0600 $HOME/.ssh/id_rsa
 cd binaries
 git init
 git remote add origin git@github.com:ezyang/sozu-binaries.git
-mkdir .cabal
-cp -R $HOME/.cabal/packages .cabal
-cp -R $HOME/.cabal/store .cabal
-cp -R $HOME/.cabal/bin .cabal
-rm -fv .cabal/packages/hackage.haskell.org/build-reports.log
-rm -fv .cabal/packages/hackage.haskell.org/00-index*
-rm -fv .cabal/packages/hackage.haskell.org/*.json
+cp $ROOT/travis-install.sh .
+cp $ROOT/travis-common.sh .
+cp -R $HOME/.cabal .
 cp -R $ROOT/dist-newstyle .
+cp -R $ROOT/cabal-testsuite .
 git add .
-git commit -m '{"account":"'$ACCOUNT'", "repo":"'$REPO'", "commit": "'$TRAVIS_COMMIT'", "tag":"'$TAG'"}'
-git push -f origin "HEAD:$TRAVIS_COMMIT/$TAG"
+# Use original pull request commit if available, so that the status
+# update goes to the right place
+COMMIT=${TRAVIS_PULL_REQUEST_SHA:-$TRAVIS_COMMIT}
+git commit -m '{"account":"'$ACCOUNT'", "repo":"'$REPO'", "commit": "'$COMMIT'", "tag":"'$TAG'"}'
+git push -f origin "HEAD:$COMMIT/$TAG"

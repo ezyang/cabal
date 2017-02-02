@@ -24,7 +24,7 @@ matrix:
 #    sudo: required
    # These don't have -dyn/-prof whitelisted yet, so we have to
    # do the old-style installation
-   - env: GHCVER=7.4.2 SCRIPT=script CABAL_LIB_ONLY=YES TEST_OTHER_VERSIONS=YES TAG="linux-7.4"
+   - env: GHCVER=7.4.2 SCRIPT=script TAG="linux-7.4"
      os: linux
      sudo: required
 #  - env: GHCVER=7.6.3 SCRIPT=script
