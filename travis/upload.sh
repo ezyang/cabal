@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -x
+
 # Configuration
 ACCOUNT=ezyang
 REPO=cabal
