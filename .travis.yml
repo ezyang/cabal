@@ -130,9 +130,6 @@ cache:
  - $HOME/.stack/setup-exe-cache
  - $HOME/.stack/snapshots
 
-   # TEMPORARY ONLY
- - dist-newstyle
-
 # We remove the index because it churns quite a bit and we don't want
 # to pay the cost of repeatedly caching it even though we don't care
 # about most changing packages.
