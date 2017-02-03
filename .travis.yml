@@ -118,6 +118,8 @@ install:
 # build config format changed.
 script:
  - ./travis-${SCRIPT}.sh -j
+ # If this fails, we WANT to fail, because the tests will not be running then
+ - ./travis/upload.sh
 
 cache:
  directories:
@@ -140,12 +142,12 @@ cache:
 before_cache:
  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/00-index*
+ - rm -fv $HOME/.cabal/packages/hackage.haskell.org/01-index*
  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/*.json
 
 # Deploy Haddocks to the haskell/cabal-website repo.
 after_success:
  - ./travis-deploy.sh
- - ./travis/upload.sh
 
 notifications:
   irc:

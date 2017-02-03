@@ -21,6 +21,7 @@ cp $ROOT/travis-common.sh .
 cp -R $HOME/.cabal .
 # Index files are too big for Git
 rm -fv .cabal/packages/hackage.haskell.org/00-index*
+rm -fv .cabal/packages/hackage.haskell.org/01-index*
 rm -fv .cabal/packages/hackage.haskell.org/*.json
 cp -R $ROOT/dist-newstyle .
 cp -R $ROOT/cabal-testsuite .
@@ -29,4 +30,4 @@ git add .
 # update goes to the right place
 COMMIT=${TRAVIS_PULL_REQUEST_SHA:-$TRAVIS_COMMIT}
 git commit -m '{"account":"'$ACCOUNT'", "repo":"'$REPO'", "commit": "'$COMMIT'", "tag":"'$TAG'"}'
-git push -f origin "HEAD:$COMMIT/$TAG"
+git push -f origin "HEAD:$TAG/$COMMIT"
