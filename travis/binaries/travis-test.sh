@@ -13,6 +13,10 @@ HACKAGE_REPO_TOOL_BDIR="${PWD}/dist-newstyle/build/hackage-repo-tool-${HACKAGE_R
 # Travis's log viewer.  So just print them all!
 TEST_OPTIONS=""
 
+# Setup symlink so that paths look the same
+mkdir -p $(dirname $UPSTREAM_BUILD_DIR)
+ln -s $TRAVIS_BUILD_DIR $UPSTREAM_BUILD_DIR
+
 # Update index
 (timed ${CABAL_INSTALL_BDIR}/build/cabal/cabal update) || exit $?
 
