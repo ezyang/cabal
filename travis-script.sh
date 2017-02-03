@@ -127,6 +127,8 @@ timed cabal new-build $jobs cabal-testsuite:cabal-tests
 unset CABAL_BUILDDIR
 
 if [ "x$CABAL_LIB_ONLY" = "xYES" ]; then
+    # If this fails, we WANT to fail, because the tests will not be running then
+    (timed ./travis/upload.sh) || exit $?
     exit 0;
 fi
 
@@ -144,11 +146,6 @@ timed cabal new-build $jobs cabal-install:cabal \
                       cabal-install:solver-quickcheck \
                       cabal-install:memory-usage-tests
 
-# The integration-tests2 need the hackage index, and need it in the secure
-# format, which is not necessarily the default format of the bootstrap cabal.
-# If the format does match then this will be very quick.
-timed ${CABAL_INSTALL_BDIR}/build/cabal/cabal update
-
 timed cabal new-build $jobs hackage-repo-tool
 
 # Haddock
@@ -162,4 +159,4 @@ unset CABAL_BUILDDIR
 ${CABAL_INSTALL_BDIR}/build/cabal/cabal --version
 
 # If this fails, we WANT to fail, because the tests will not be running then
-./travis/upload.sh
+(timed ./travis/upload.sh) || exit $?
