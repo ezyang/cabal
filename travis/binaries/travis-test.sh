@@ -17,8 +17,11 @@ TEST_OPTIONS=""
 mkdir -p $(dirname $UPSTREAM_BUILD_DIR)
 ln -s $TRAVIS_BUILD_DIR $UPSTREAM_BUILD_DIR
 
-# Update index
-(timed ${CABAL_INSTALL_BDIR}/build/cabal/cabal update) || exit $?
+# Touch package database cache files, so we don't complain they're
+# stale (Git doesn't preserve modification times, so we'll end
+# up with something wrong.)
+touch "$CABAL_STORE_DB/package.cache"
+touch "$CABAL_LOCAL_DB/package.cache"
 
 # Run tests
 (timed ${CABAL_BDIR}/build/unit-tests/unit-tests $TEST_OPTIONS) || exit $?
@@ -50,6 +53,9 @@ fi
 # ---------------------------------------------------------------------
 # cabal-install
 # ---------------------------------------------------------------------
+
+# Update index
+(timed ${CABAL_INSTALL_BDIR}/build/cabal/cabal update) || exit $?
 
 # Run tests
 (timed ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests         $TEST_OPTIONS) || exit $?

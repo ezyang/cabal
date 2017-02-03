@@ -9,7 +9,7 @@ REPO=${TRAVIS_REPO_SLUG#*"/"}
 
 # TAG will be used to uniquely identify a matrix entry; we
 # need to push each matrix entry to a separate branch.
-TAG="$TRAVIS_OS_NAME-$GHCVER$TAG_SUFFIX"
+TAG="$TRAVIS_OS_NAME-$GHCVER$TAGSUFFIX"
 
 # This is the commit for which we want a GitHub status update
 # ping to go to.  Note that it is NOT TRAVIS_COMMIT unconditionally,
@@ -28,6 +28,9 @@ cd travis
 # Setup SSH key we will use to push to binaries repository
 cp id_rsa $HOME/.ssh/id_rsa
 chmod 0600 $HOME/.ssh/id_rsa
+
+# Setup SSH keys
+ssh-keyscan github.com >> $HOME/.ssh/known_hosts
 
 cd binaries
 

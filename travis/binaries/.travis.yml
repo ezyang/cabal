@@ -1,7 +1,9 @@
 language: c
-git:
-    # https://github.com/travis-ci/travis-ci/issues/4575
-    depth: 1
+# This doesn't actually help because we always push a single
+# commit to the branch in question
+#git:
+#    # https://github.com/travis-ci/travis-ci/issues/4575
+#    depth: 1
 sudo: required
 before_install:
  - export PATH=/opt/ghc/$GHCVER/bin:$PATH
