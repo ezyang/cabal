@@ -160,3 +160,6 @@ unset CABAL_BUILDDIR
 
 # Check what we got
 ${CABAL_INSTALL_BDIR}/build/cabal/cabal --version
+
+# If this fails, we WANT to fail, because the tests will not be running then
+./travis/upload.sh

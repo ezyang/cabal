@@ -1,8 +1,7 @@
+language: c
 git:
     # https://github.com/travis-ci/travis-ci/issues/4575
     depth: 1
-env: GHCVER=7.6.3
-os: linux
 sudo: required
 before_install:
  - export PATH=/opt/ghc/$GHCVER/bin:$PATH
@@ -25,3 +24,6 @@ notifications:
     channels:
       - "chat.freenode.net##haskell-cabal"
   slack: haskell-cabal:sCq6GLfy9N8MJrInosg871n4
+# To append on:
+# env: GHCVER=7.6.3 UPSTREAM_BUILD_DIR=/home/travis/user/repo
+# os: linux

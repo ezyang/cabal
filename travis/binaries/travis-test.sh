@@ -19,13 +19,13 @@ TEST_OPTIONS=""
 # Run tests
 (timed ${CABAL_BDIR}/build/unit-tests/unit-tests $TEST_OPTIONS) || exit $?
 
-#   if [ "x$PARSEC" = "xYES" ]; then
-#       # Parser unit tests
-#       (cd Cabal && timed ${CABAL_BDIR}/build/parser-tests/parser-tests $TEST_OPTIONS) || exit $?
+   if [ "x$PARSEC" = "xYES" ]; then
+       # Parser unit tests
+       (cd Cabal && timed ${CABAL_BDIR}/build/parser-tests/parser-tests $TEST_OPTIONS) || exit $?
 
-#       # Test we can parse Hackage
-#       (cd Cabal && timed ${CABAL_BDIR}/build/parser-tests/parser-hackage-tests $TEST_OPTIONS) | tail || exit $?
-#   fi
+       # Test we can parse Hackage
+       (cd Cabal && timed ${CABAL_BDIR}/build/parser-tests/parser-hackage-tests $TEST_OPTIONS) | tail || exit $?
+   fi
 
 (cd cabal-testsuite && timed ${CABAL_TESTSUITE_BDIR}/build/cabal-tests/cabal-tests -j3 $TEST_OPTIONS) || exit $?
 
@@ -39,6 +39,10 @@ if [ "x$TEST_OTHER_VERSIONS" = "xYES" ]; then
         cd cabal-testsuite && timed ${CABAL_TESTSUITE_BDIR}/build/cabal-tests/cabal-tests $TEST_OPTIONS)
 fi
 
+if [ "x$CABAL_LIB_ONLY" = "xYES" ]; then
+    exit 0;
+fi
+
 # ---------------------------------------------------------------------
 # cabal-install
 # ---------------------------------------------------------------------
@@ -46,8 +50,11 @@ fi
 # Run tests
 (timed ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests         $TEST_OPTIONS) || exit $?
 (cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/solver-quickcheck/solver-quickcheck  $TEST_OPTIONS --quickcheck-tests=1000) || exit $?
-#(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
-#(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 $TEST_OPTIONS) || exit $?
 (timed ${CABAL_INSTALL_BDIR}/build/memory-usage-tests/memory-usage-tests $TEST_OPTIONS) || exit $?
 
+# These need the cabal-install directory
+(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests  $TEST_OPTIONS) || exit $?
+(cd cabal-install && timed ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 $TEST_OPTIONS) || exit $?
+
+# Big tests
 (cd cabal-testsuite && timed ${CABAL_TESTSUITE_BDIR}/build/cabal-tests/cabal-tests -j3 --skip-setup-tests --with-cabal ${CABAL_INSTALL_BDIR}/build/cabal/cabal --with-hackage-repo-tool ${HACKAGE_REPO_TOOL_BDIR}/build/hackage-repo-tool/hackage-repo-tool $TEST_OPTIONS) || exit $?
