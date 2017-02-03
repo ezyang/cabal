@@ -18,9 +18,9 @@ before_install:
 script:
     - ./travis-test.sh
 notifications:
-    webhooks:
-        urls: https://sake-bot.herokuapp.com/
-        on_start: always
+  webhooks:
+    urls: https://sake-bot.herokuapp.com/
+    on_start: always
   irc:
     channels:
       - "chat.freenode.net##haskell-cabal"
