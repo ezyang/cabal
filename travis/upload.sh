@@ -43,7 +43,7 @@ git remote add origin git@github.com:ezyang/sozu-binaries.git
 # that downstream builds with the correct configuration
 echo "env: GHCVER=$GHCVER UPSTREAM_BUILD_DIR=$TRAVIS_BUILD_DIR CABAL_LIB_ONLY=$CABAL_LIB_ONLY TEST_OTHER_VERSIONS=$TEST_OTHER_VERSIONS PARSEC=$PARSEC" >> .travis.yml
 echo "os: $TRAVIS_OS_NAME" >> .travis.yml
-if [ "x$GHCVER" = "x7.8.4" ] && [ "x$TRAVIS_OS_NAME" = "xos" ]; then
+if [ "x$GHCVER" = "x7.8.4" ] && [ "x$TRAVIS_OS_NAME" = "xosx" ]; then
     echo "osx_image: xcode6.4" >> .travis.yml
 fi
 
