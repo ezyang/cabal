@@ -18,7 +18,7 @@ CABAL_INSTALL_SETUP="${CABAL_INSTALL_BDIR}/setup/setup"
 HACKAGE_REPO_TOOL_BDIR="${PWD}/dist-newstyle/build/hackage-repo-tool-${HACKAGE_REPO_TOOL_VERSION}"
 # --hide-successes uses terminal control characters which mess up
 # Travis's log viewer.  So just print them all!
-TEST_OPTIONS=""
+TEST_OPTIONS="--num-threads 2"
 
 # ---------------------------------------------------------------------
 # Parse options
