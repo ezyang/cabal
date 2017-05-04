@@ -13,13 +13,6 @@
 
 . ./travis-common.sh
 
-CABAL_STORE_DB="${HOME}/.cabal/store/ghc-${GHCVER}/package.db"
-CABAL_LOCAL_DB="${PWD}/dist-newstyle/packagedb/ghc-${GHCVER}"
-CABAL_BDIR="${PWD}/dist-newstyle/build/Cabal-${CABAL_VERSION}"
-CABAL_TESTSUITE_BDIR="${PWD}/dist-newstyle/build/cabal-testsuite-${CABAL_VERSION}"
-CABAL_INSTALL_BDIR="${PWD}/dist-newstyle/build/cabal-install-${CABAL_VERSION}"
-CABAL_INSTALL_SETUP="${CABAL_INSTALL_BDIR}/setup/setup"
-HACKAGE_REPO_TOOL_BDIR="${PWD}/dist-newstyle/build/hackage-repo-tool-${HACKAGE_REPO_TOOL_VERSION}"
 # --hide-successes uses terminal control characters which mess up
 # Travis's log viewer.  So just print them all!
 TEST_OPTIONS=""

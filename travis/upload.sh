@@ -59,21 +59,30 @@ if [ "x$GHCVER" = "x7.8.4" ] && [ "x$TRAVIS_OS_NAME" = "xosx" ]; then
     echo "osx_image: xcode6.4" >> .travis.yml
 fi
 
+# Make directory layout
+mkdir Cabal
+mkdir cabal-install
+mkdir hackage-repo-tool
+cp -R $TRAVIS_BUILD_DIR/cabal-testsuite                              .
+cp -R $TRAVIS_BUILD_DIR/Cabal/tests                                  Cabal
+cp -R $TRAVIS_BUILD_DIR/cabal-install/tests                          cabal-install
 # Install all of the necessary files for testing
 cp $TRAVIS_BUILD_DIR/travis-install.sh .
 cp $TRAVIS_BUILD_DIR/travis-common.sh .
-cp -R $HOME/.cabal .
-# Index files are too big for Git
-rm -fv .cabal/packages/hackage.haskell.org/00-index*
-rm -fv .cabal/packages/hackage.haskell.org/01-index*
-rm -fv .cabal/packages/hackage.haskell.org/*.json
-cp -R $TRAVIS_BUILD_DIR/dist-newstyle .
-# Test files for test suites that rely on them
-cp -R $TRAVIS_BUILD_DIR/cabal-testsuite .
-mkdir Cabal
-cp -R $TRAVIS_BUILD_DIR/Cabal/tests Cabal
-mkdir cabal-install
-cp -R $TRAVIS_BUILD_DIR/cabal-install/tests cabal-install
+# The binaries to test (statically linked, of course!)
+cp ${CABAL_BDIR}/build/unit-tests/unit-tests                         Cabal
+if [ "x$PARSEC" = "xYES" ]; then
+    cp ${CABAL_BDIR}/build/parser-tests/parser-tests                 Cabal
+    cp ${CABAL_BDIR}/build/parser-hackage-tests/parser-hackage-tests Cabal
+fi
+cp -R ${CABAL_TESTSUITE_BDIR}                                        cabal-testsuite/dist
+cp ${CABAL_INSTALL_BDIR}/build/cabal-install/cabal                   cabal-install
+cp ${CABAL_INSTALL_BDIR}/build/unit-tests/unit-tests                 cabal-install
+cp ${CABAL_INSTALL_BDIR}/build/solver-quickcheck/solver-quickcheck   cabal-install
+cp ${CABAL_INSTALL_BDIR}/build/integration-tests/integration-tests   cabal-install
+cp ${CABAL_INSTALL_BDIR}/build/integration-tests2/integration-tests2 cabal-install
+cp ${CABAL_INSTALL_BDIR}/build/memory-usage-tests/memory-usage-tests cabal-install
+cp ${HACKAGE_REPO_TOOL_BDIR}/build/hackage-repo-tool/hackage-repo-tool hackage-repo-tool
 
 # Add, commit, push
 git add .
